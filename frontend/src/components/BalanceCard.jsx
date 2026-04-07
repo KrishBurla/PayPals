@@ -1,7 +1,7 @@
 import React from "react"
 import { ArrowUpRight, ArrowDownRight, Wallet } from "lucide-react"
 
-export function BalanceCard() {
+export function BalanceCard({ onSettle }) {
   return (
     <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
       <div className="grid sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
@@ -29,7 +29,7 @@ export function BalanceCard() {
             <span className="text-sm font-semibold text-slate-500">Net Balance</span>
           </div>
           <p className="mt-3 text-4xl font-extrabold tracking-tight text-teal-500">+$158.55</p>
-          <button className="mt-5 w-full rounded-xl bg-slate-900 py-3 text-sm font-bold text-white shadow-md hover:bg-slate-800 active:scale-95 transition-all">
+          <button onClick={onSettle} className="mt-5 w-full rounded-xl bg-slate-900 py-3 text-sm font-bold text-white shadow-md hover:bg-slate-800 active:scale-95 transition-all">
             Settle Up
           </button>
         </div>

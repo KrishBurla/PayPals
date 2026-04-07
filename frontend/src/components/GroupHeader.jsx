@@ -8,7 +8,7 @@ const members = [
   { name: "Emily Davis", color: "bg-emerald-100 text-emerald-600", initials: "ED" },
 ]
 
-export function GroupHeader() {
+export function GroupHeader({ onAddExpense }) {
   return (
     <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between bg-white p-6 lg:p-8 rounded-3xl shadow-sm border border-slate-200">
       <div>
@@ -30,7 +30,7 @@ export function GroupHeader() {
             </div>
           ))}
         </div>
-        <button className="flex h-11 items-center gap-2 rounded-xl bg-teal-500 px-5 text-sm font-bold text-white shadow-md shadow-teal-500/20 hover:bg-teal-600 transition-all active:scale-95">
+        <button onClick={onAddExpense} className="flex h-11 items-center gap-2 rounded-xl bg-teal-500 px-5 text-sm font-bold text-white shadow-md shadow-teal-500/20 hover:bg-teal-600 transition-all active:scale-95">
           <Plus className="h-5 w-5" /> Add Expense
         </button>
       </div>
