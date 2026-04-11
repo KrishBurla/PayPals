@@ -13,15 +13,15 @@ export default function Dashboard() {
   const [isSettleOpen, setIsSettleOpen] = useState(false);
 
   return (
-    // THE FIX: Strict, screen-locking flex container. No overlapping possible.
-    <div className="flex h-screen w-full bg-slate-50 font-sans text-slate-900 overflow-hidden">
+    // THE FIX: Standard block layout. Do NOT use 'flex' here.
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       
-      {/* Sidebar is now a locked flex item */}
       <Sidebar />
       
-      {/* Main content takes exactly the remaining width and scrolls independently */}
-      <main className="flex-1 h-full overflow-y-auto overflow-x-hidden relative">
-        <div className="mx-auto max-w-[1600px] p-6 lg:p-8 pt-20 lg:pt-8">
+      {/* THE MAGIC OFFSET: lg:ml-72 pushes the main content right by exactly 18rem (w-72) on desktop to make room for the fixed sidebar. */}
+      <main className="transition-all duration-300 ease-in-out lg:ml-72">
+        {/* pt-24 on mobile pushes content down so it doesn't hide behind the hamburger menu. lg:pt-8 restores normal padding. */}
+        <div className="mx-auto max-w-[1600px] p-6 pt-24 lg:p-8 lg:pt-8">
           
           <GroupHeader onAddExpense={() => setIsAddOpen(true)} />
           
@@ -43,13 +43,14 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Floating Action Button (Visible on all screens like Claude) */}
-        <div onClick={() => setIsAddOpen(true)}>
-            <FloatingActions />
-        </div>
+        {/* Floating Action Button */}
+        <FloatingActions 
+            onAddExpense={() => setIsAddOpen(true)} 
+            onSettle={() => setIsSettleOpen(true)} 
+        />
       </main>
 
-      {/* --- ADD EXPENSE MODAL (Featuring Claude's Checkbox Logic) --- */}
+      {/* --- ADD EXPENSE MODAL --- */}
       {isAddOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={() => setIsAddOpen(false)}>
             <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -94,7 +95,7 @@ export default function Dashboard() {
                         <div className="flex flex-wrap gap-2">
                             {["You", "Sarah", "Mike", "Emily"].map(name => (
                                 <label key={name} className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 transition-colors hover:border-teal-300 hover:bg-teal-50/50">
-                                    <input type="checkbox" defaultChecked className="h-4 w-4 rounded border-slate-300 text-teal-500 focus:ring-teal-500" />
+                                    <input type="checkbox" defaultChecked className="h-4 w-4 rounded border-slate-300 accent-teal-500 text-teal-500 focus:ring-teal-500" />
                                     <span className="text-sm font-bold text-slate-700">{name}</span>
                                 </label>
                             ))}
@@ -135,7 +136,7 @@ export default function Dashboard() {
                         <button className="rounded-lg border border-rose-200 bg-white px-4 py-2 text-xs font-bold text-rose-700 shadow-sm transition-colors hover:bg-rose-50">Pay</button>
                     </div>
                 </div>
-                <button onClick={() => setIsSettleOpen(false)} className="w-full rounded-xl bg-slate-900 py-4 text-base font-bold text-white transition-all hover:bg-slate-800 active:scale-95 shadow-lg">
+                <button onClick={() => setIsSettleOpen(false)} className="w-full rounded-xl bg-slate-900 py-4 text-base font-bold text-white shadow-lg transition-all hover:bg-slate-800 active:scale-95">
                     Settle All Debts
                 </button>
             </div>
