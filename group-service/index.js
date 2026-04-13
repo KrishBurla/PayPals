@@ -16,6 +16,7 @@ connectDB();
 app.post('/', createGroup);
 app.get('/user', getUserGroups); // Fetches groups for the logged-in user
 app.get('/:id', getGroup);       // Fetches a specific group by ID
+app.post('/:id/members', require('./controllers/groupController').addMember);
 
 const PORT = process.env.PORT || 3003;
 app.listen(PORT, () => {

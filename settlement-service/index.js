@@ -11,6 +11,7 @@ startConsumer();
 
 // API Route to fetch balances
 app.get('/balances/:groupId', getBalances);
+app.post('/settle', require('./controllers/settlementController').settleUp);
 
 const PORT = process.env.PORT || 3005;
 app.listen(PORT, () => {

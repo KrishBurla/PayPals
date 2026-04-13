@@ -1,5 +1,5 @@
 const Expense = require('../models/Expense');
-const { publishToQueue } = require('../../shared/rabbitmq');
+const { publishToQueue, publishToExchange } = require('../../shared/rabbitmq');
 
 exports.addExpense = async (req, res) => {
     try {
@@ -32,8 +32,9 @@ exports.addExpense = async (req, res) => {
         const expense = new Expense({ groupId, paidBy, amount, description, splitType, splits });
         await expense.save();
 
-        // 📢 Notify other services via RabbitMQ
-        await publishToQueue('expense_created', {
+        // 📢 Notify other services via RabbitMQ Exchange (Fanout)
+        await publishToExchange('expense_events', {
+            type: 'expense',
             expenseId: expense._id,
             groupId,
             paidBy,
@@ -44,5 +45,16 @@ exports.addExpense = async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: "Server error while creating expense" });
+    }
+};
+
+exports.getGroupExpenses = async (req, res) => {
+    try {
+        const { groupId } = req.params;
+        const expenses = await Expense.find({ groupId }).sort({ createdAt: -1 });
+        res.status(200).json(expenses);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Server error fetching expenses" });
     }
 };

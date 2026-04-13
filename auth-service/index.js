@@ -9,6 +9,7 @@ app.use(cors());
 // Routes
 app.post('/register', register);
 app.post('/login', login);
+app.get('/users', require('./controllers/authController').getUsers);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

@@ -1,204 +1,393 @@
-// src/pages/GroupDetail.jsx
-import React, { useEffect, useState, useContext } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useContext, useEffect } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { X, ChevronLeft } from 'lucide-react';
+import { Sidebar } from '../components/Sidebar';
+import { GroupHeader } from '../components/GroupHeader';
+import { BalanceCard } from '../components/BalanceCard';
+import { ExpenseLedger } from '../components/ExpenseLedger';
+import { MemberDebtList } from '../components/MemberDebtList';
+import { MonthlyChart, CategorySpending, QuickStats, ActivityFeed } from '../components/Analytics';
+import { FloatingActions } from '../components/FloatingActions';
+
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
+import { CurrencyContext } from '../context/CurrencyContext';
+import { io } from 'socket.io-client';
 
-const GroupDetail = () => {
-    const { id } = useParams();
-    const navigate = useNavigate();
-    const { user } = useContext(AuthContext); // Get logged-in user
-    
-    const [group, setGroup] = useState(null);
-    const [balances, setBalances] = useState({});
-    const [isLoading, setIsLoading] = useState(true);
+export default function GroupDetail() {
+  const { id } = useParams(); // Get group ID from URL
+  const navigate = useNavigate();
+  const location = useLocation();
 
-    // Modal State
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [description, setDescription] = useState('');
-    const [amount, setAmount] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAddOpen, setIsAddOpen] = useState(false);
 
-    const fetchGroupData = async () => {
-        try {
-            const [groupRes, balanceRes] = await Promise.all([
-                api.get(`/groups/${id}`),
-                api.get(`/settlements/balances/${id}`)
-            ]);
-            setGroup(groupRes.data);
-            setBalances(balanceRes.data.balances);
-        } catch (error) {
-            console.error("Failed to fetch group details", error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+  useEffect(() => {
+      if (location.search.includes('add=true')) {
+          setIsAddOpen(true);
+          // Optional: clean up the URL without triggering a reload
+          window.history.replaceState({}, '', `/group/${id}`);
+      }
+  }, [location, id]);
+  const [isSettleOpen, setIsSettleOpen] = useState(false);
+  const [settleAmounts, setSettleAmounts] = useState({});
+  const handleSettleAmountChange = (key, val) => setSettleAmounts(prev => ({...prev, [key]: val}));
+  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+  const [memberEmail, setMemberEmail] = useState('');
+  const [toastMessage, setToastMessage] = useState(null);
+  
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
 
-    useEffect(() => {
-        fetchGroupData();
-    }, [id]);
+  const categoriesOptions = [
+      { id: 'food', label: 'Food', icon: '🍽️' },
+      { id: 'home', label: 'Housing', icon: '🏠' },
+      { id: 'transport', label: 'Transport', icon: '🚗' },
+      { id: 'entertainment', label: 'Entertainment', icon: '📺' },
+      { id: 'custom', label: 'Custom', icon: '✨' }
+  ];
+  
+  const [expenseDesc, setExpenseDesc] = useState('');
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseCategory, setExpenseCategory] = useState('food');
+  const [customCategory, setCustomCategory] = useState('');
+  const [splitType, setSplitType] = useState('EQUAL'); // EQUAL, EXACT, PERCENTAGE
+  const [splitData, setSplitData] = useState({}); // { userId: value }
+  
+  const { user } = useContext(AuthContext);
+  const { formatCurrency } = useContext(CurrencyContext);
 
-    const handleAddExpense = async (e) => {
-        e.preventDefault();
-        setIsSubmitting(true);
-        try {
-            // Send the request to your API Gateway
-            await api.post('/expenses', {
-                groupId: id,
-                amount: Number(amount),
-                description: description,
-                splitType: 'EQUAL',
-                // 🪄 THE MAGIC TRICK: We are adding a fake friend so the math has someone to split with!
-                participants: [user.id, "dummy-friend-123"] 
-            });
+  const [activeGroup, setActiveGroup] = useState(null);
+  const [expenses, setExpenses] = useState([]);
+  const [balances, setBalances] = useState({});
+  const [allUsers, setAllUsers] = useState([]);
 
-            // Close modal, clear form, and refresh balances!
-            setIsModalOpen(false);
-            setDescription('');
-            setAmount('');
-            await fetchGroupData();
-        } catch (error) {
-            console.error("Failed to add expense", error);
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+  useEffect(() => {
+    const socket = io('http://localhost:3006');
+    socket.on('notification', (payload) => {
+        setToastMessage(payload.type === 'settle' ? 'A balance was settled!' : 'A new expense was added!');
+        setTimeout(() => setToastMessage(null), 5000);
+        setTimeout(() => window.location.reload(), 1000); // Quick refresh hack
+    });
 
-    if (isLoading) {
-        return (
-            <div className="min-h-screen bg-slate-50 flex justify-center items-center">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-500"></div>
-            </div>
-        );
+    api.get('/auth/users').then(res => setAllUsers(res.data)).catch(console.error);
+
+    if (id) {
+        api.get(`/groups/${id}`).then(res => setActiveGroup(res.data)).catch(console.error);
+        api.get(`/expenses/group/${id}`).then(res => setExpenses(res.data)).catch(console.error);
+        api.get(`/settlements/balances/${id}`).then(res => setBalances(res.data.balances || {})).catch(console.error);
     }
+  }, [id]);
 
-    return (
-        <div className="min-h-screen bg-slate-50 pb-10 relative">
-            {/* Header */}
-            <nav className="bg-white shadow-sm border-b border-gray-200 p-4">
-                <div className="max-w-4xl mx-auto flex items-center space-x-4">
-                    <button onClick={() => navigate('/dashboard')} className="text-gray-500 hover:text-gray-800 font-medium">
-                        ← Back to Dashboard
-                    </button>
-                    <h1 className="text-xl font-bold text-gray-800 border-l-2 border-gray-200 pl-4">{group?.name}</h1>
+  useEffect(() => {
+      if (activeGroup?.members && Object.keys(splitData).length === 0) {
+          // Initialize split data to everyone participating by default
+          const initial = {};
+          activeGroup.members.forEach(m => initial[m] = '');
+          setSplitData(initial);
+      }
+  }, [activeGroup]);
+
+  const handleToggleSplit = (userId) => {
+      setSplitData(prev => {
+          const next = { ...prev };
+          if (next[userId] !== undefined) delete next[userId];
+          else next[userId] = '';
+          return next;
+      });
+  };
+
+  const handleSplitValueChange = (userId, val) => {
+      setSplitData(prev => ({ ...prev, [userId]: val }));
+  };
+
+  const handleSubmitExpense = async () => {
+      const amt = parseFloat(expenseAmount);
+      if (!expenseDesc || !amt || Object.keys(splitData).length === 0) {
+          alert('Please fill out all fields.'); return;
+      }
+      
+      const finalCategory = expenseCategory === 'custom' ? customCategory : expenseCategory;
+      let payloadParticipants = [];
+
+      if (splitType === 'EQUAL') {
+          payloadParticipants = Object.keys(splitData);
+      } else if (splitType === 'EXACT') {
+          payloadParticipants = Object.keys(splitData).map(uid => ({ userId: uid, exact: parseFloat(splitData[uid]) || 0 }));
+          const sum = payloadParticipants.reduce((a, b) => a + b.exact, 0);
+          if (Math.abs(sum - amt) > 0.1) {
+              alert(`Exact amounts sum to ${sum}, but total is ${amt}!`); return;
+          }
+      } else if (splitType === 'PERCENTAGE') {
+          payloadParticipants = Object.keys(splitData).map(uid => ({ userId: uid, percent: parseFloat(splitData[uid]) || 0 }));
+          const sum = payloadParticipants.reduce((a, b) => a + b.percent, 0);
+          if (Math.abs(sum - 100) > 0.1) {
+              alert(`Percentages sum to ${sum}%, but must be exactly 100%!`); return;
+          }
+      }
+
+      try {
+          await api.post('/expenses', {
+              groupId: activeGroup._id,
+              amount: amt,
+              description: expenseDesc,
+              category: finalCategory,
+              splitType: splitType,
+              participants: payloadParticipants
+          });
+          setIsAddOpen(false);
+          setExpenseDesc(''); setExpenseAmount(''); setSplitType('EQUAL');
+          setTimeout(() => {
+              api.get(`/expenses/group/${id}`).then(res => setExpenses(res.data)).catch(console.error);
+              api.get(`/settlements/balances/${id}`).then(res => setBalances(res.data.balances || {})).catch(console.error);
+          }, 1500); // Polling fallback in case sockets fail
+      } catch (e) {
+          console.error(e);
+          alert('Error adding expense');
+      }
+  };
+
+  const handleAddMember = async () => {
+    try {
+        const foundUser = allUsers.find(u => u.email === memberEmail);
+        if (!foundUser) { alert("User not found!"); return; }
+        await api.post(`/groups/${activeGroup._id}/members`, { userId: foundUser.id });
+        setIsAddMemberOpen(false); setMemberEmail(''); window.location.reload();
+    } catch(e) { console.error(e); alert('Error'); }
+  };
+
+  const handleSettle = async (whoOwes, whoIsOwed, amountToSettle, fullAmount) => {
+    const finalAmount = parseFloat(amountToSettle) || fullAmount;
+    try { 
+        await api.post('/settlements/settle', { groupId: activeGroup._id, borrowerId: whoOwes, lenderId: whoIsOwed, amount: finalAmount }); 
+        setIsSettleOpen(false); 
+        setTimeout(() => {
+            api.get(`/settlements/balances/${id}`).then(res => setBalances(res.data.balances || {})).catch(console.error);
+        }, 1500); 
+    } catch(e) { console.error(e); }
+  };
+
+  if (!user || !activeGroup) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><p className="font-bold text-slate-500">Loading Group...</p></div>;
+
+  let totalOwedToYou = 0, totalYouOwe = 0, owedPeopleCount = 0, owePeopleCount = 0;
+  Object.keys(balances).forEach(key => {
+      const [wO, wI] = key.split(' -> ');
+      if (wO === user.id && balances[key] > 0) { totalYouOwe += balances[key]; owePeopleCount++; }
+      else if (wI === user.id && balances[key] > 0) { totalOwedToYou += balances[key]; owedPeopleCount++; }
+  });
+
+  const totalExpenses = expenses.reduce((acc, curr) => acc + curr.amount, 0);
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+      <Sidebar />
+      <main className="transition-all duration-300 ease-in-out lg:ml-72">
+        <div className="mx-auto max-w-[1600px] p-6 pt-24 lg:p-8 lg:pt-8">
+          
+          <div className="mb-6 flex items-center gap-4">
+              <button onClick={() => navigate('/groups')} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 md:hidden">
+                  <ChevronLeft className="h-5 w-5" />
+              </button>
+              <h1 className="text-2xl font-black md:hidden">{activeGroup?.name}</h1>
+          </div>
+
+          <GroupHeader onAddExpense={() => setIsAddOpen(true)} onAddMember={() => setIsAddMemberOpen(true)} group={activeGroup} users={allUsers} totalExpenses={totalExpenses} />
+          
+          <div className="mt-8 grid gap-8 xl:grid-cols-3">
+            <div className="flex min-w-0 flex-col gap-8 xl:col-span-2">
+              <BalanceCard onSettle={() => setIsSettleOpen(true)} totalOwed={totalOwedToYou} totalOwe={totalYouOwe} owedPeopleCount={owedPeopleCount} owePeopleCount={owePeopleCount} />
+              <MonthlyChart rawExpenses={expenses} />
+              <ExpenseLedger expenses={expenses} users={allUsers} currentUser={user} />
+            </div>
+            <div className="flex min-w-0 flex-col gap-8 xl:col-span-1">
+              <MemberDebtList onSettle={() => setIsSettleOpen(true)} balances={balances} users={allUsers} currentUser={user} />
+              <CategorySpending rawExpenses={expenses} />
+              <QuickStats rawExpenses={expenses} currentUser={user} balances={balances} activeGroup={activeGroup} />
+              <ActivityFeed rawExpenses={expenses} users={allUsers} />
+            </div>
+          </div>
+        </div>
+
+        <FloatingActions onAddExpense={() => setIsAddOpen(true)} onSettle={() => setIsSettleOpen(true)} />
+      </main>
+
+      {/* --- ADD EXPENSE MODAL --- */}
+      {isAddOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={() => setIsAddOpen(false)}>
+            <div className="w-full max-w-lg rounded-3xl bg-white p-8 shadow-2xl max-h-[90vh] overflow-y-auto animate-in" onClick={e => e.stopPropagation()}>
+                <div className="mb-6 flex items-center justify-between">
+                    <h2 className="text-2xl font-extrabold text-slate-900">Add Expense</h2>
+                    <button onClick={() => setIsAddOpen(false)} className="rounded-full p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5"/></button>
                 </div>
-            </nav>
-
-            <main className="max-w-4xl mx-auto px-4 mt-8 space-y-6">
-                {/* Action Bar */}
-                <div className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                <div className="space-y-5">
                     <div>
-                        <h2 className="text-2xl font-bold text-gray-900">Group Balances</h2>
-                        <p className="text-gray-500 text-sm mt-1">See who owes who in real-time.</p>
+                        <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Description</label>
+                        <input type="text" value={expenseDesc} onChange={e=>setExpenseDesc(e.target.value)} placeholder="e.g. Dinner" className="w-full rounded-xl border border-slate-200 px-4 py-3.5 outline-none focus:border-teal-500" />
                     </div>
-                    <button 
-                        onClick={() => setIsModalOpen(true)}
-                        className="bg-teal-500 hover:bg-teal-600 text-white px-6 py-3 rounded-xl font-medium shadow-md transition-all active:scale-95 flex items-center space-x-2"
-                    >
-                        <span className="text-xl">🧾</span>
-                        <span>Add Expense</span>
-                    </button>
-                </div>
-
-                {/* Balances List */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                    {Object.keys(balances).length === 0 ? (
-                        <div className="p-16 text-center">
-                            <div className="text-5xl mb-4">🍻</div>
-                            <h3 className="text-lg font-bold text-gray-800">You are all settled up!</h3>
-                            <p className="text-gray-500">No one owes anything in this group.</p>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Amount</label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-3.5 font-bold text-slate-400">{formatCurrency(0).charAt(0)}</span>
+                                <input type="number" value={expenseAmount} onChange={e=>setExpenseAmount(e.target.value)} placeholder="0.00" className="w-full pl-8 pr-4 py-3.5 border border-slate-200 outline-none focus:border-teal-500 rounded-xl" />
+                            </div>
                         </div>
-                    ) : (
-                        <ul className="divide-y divide-gray-100">
-                            {Object.entries(balances).map(([relationship, amount], index) => {
-                                const [debtor, creditor] = relationship.split(' -> ');
-                                // Make the IDs look slightly nicer
-                                const debtorName = debtor === 'dummy-friend-123' ? 'Dummy Friend' : 'You';
-                                const creditorName = creditor === user.id ? 'You' : creditor.substring(0,8);
-
-                                return (
-                                    <li key={index} className="p-6 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                                        <div className="flex items-center space-x-4">
-                                            <div className="w-12 h-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-xl font-bold border border-red-100">
-                                                💸
-                                            </div>
-                                            <div>
-                                                <p className="text-gray-900 text-lg">
-                                                    <span className="font-bold">{debtorName}</span> owes <span className="font-bold">{creditorName}</span>
-                                                </p>
-                                            </div>
+                        <div className="relative">
+                            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Category</label>
+                            <div 
+                                onClick={() => setIsCategoryOpen(!isCategoryOpen)}
+                                className="w-full flex items-center justify-between border border-slate-200 rounded-xl px-4 py-3.5 outline-none focus:border-teal-500 cursor-pointer bg-white transition-all hover:bg-slate-50"
+                            >
+                                <span className="font-bold text-slate-700">
+                                    {categoriesOptions.find(c => c.id === expenseCategory)?.icon} {categoriesOptions.find(c => c.id === expenseCategory)?.label}
+                                </span>
+                                <span className={`text-slate-400 transition-transform duration-300 ${isCategoryOpen ? 'rotate-180' : ''}`}>▼</span>
+                            </div>
+                            {isCategoryOpen && (
+                                <div className="absolute top-[80px] left-0 w-full bg-white border border-slate-200 rounded-xl shadow-xl z-20 overflow-hidden transform opacity-100 scale-100 transition-all duration-200 origin-top">
+                                    {categoriesOptions.map(c => (
+                                        <div 
+                                            key={c.id} 
+                                            onClick={() => { setExpenseCategory(c.id); setIsCategoryOpen(false); }}
+                                            className={`px-4 py-3 cursor-pointer transition-colors hover:bg-teal-50 font-bold ${expenseCategory === c.id ? 'bg-teal-50 text-teal-700' : 'text-slate-600'}`}
+                                        >
+                                            {c.icon} {c.label}
                                         </div>
-                                        <div className="text-2xl font-bold text-gray-900">
-                                            ${amount.toFixed(2)}
-                                        </div>
-                                    </li>
-                                );
-                            })}
-                        </ul>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    
+                    {expenseCategory === 'custom' && (
+                        <div>
+                            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Custom Category Emoji & Name</label>
+                            <input type="text" value={customCategory} onChange={e=>setCustomCategory(e.target.value)} placeholder="e.g. 🐶 Pet Supplies" className="w-full rounded-xl border border-slate-200 px-4 py-3.5 outline-none focus:border-teal-500" />
+                        </div>
                     )}
-                </div>
-            </main>
 
-            {/* Add Expense Modal */}
-            {isModalOpen && (
-                <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
-                        <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                            <span>🧾</span> Add a New Expense
-                        </h2>
-                        <form onSubmit={handleAddExpense}>
-                            <div className="space-y-4 mb-6">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">What was this for?</label>
+                    <div>
+                        <div className="flex items-center justify-between mb-3">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Split Logic</label>
+                            <div className="flex gap-2">
+                                {['EQUAL', 'EXACT', 'PERCENTAGE'].map(t => (
+                                    <button 
+                                        key={t}
+                                        onClick={() => setSplitType(t)}
+                                        className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${splitType === t ? 'bg-teal-500 text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                                    >
+                                        {t}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                             {activeGroup?.members?.map(id => {
+                                const u = allUsers.find(au => au.id === id);
+                                const nm = u ? u.name : id.substring(0,6);
+                                const isChecked = splitData[id] !== undefined;
+                                return (
+                                <div key={id} className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 transition-colors ${isChecked?'border-teal-300 bg-teal-50/50':'border-slate-100 bg-slate-50'}`}>
+                                    <div onClick={() => handleToggleSplit(id)} className="flex items-center gap-3 flex-1 cursor-pointer">
+                                        <div className={`h-5 w-5 rounded border flex-shrink-0 transition-colors ${isChecked?'bg-teal-500 border-teal-500':'border-slate-300 bg-white'}`}></div>
+                                        <span className={`text-sm font-bold ${isChecked?'text-slate-900':'text-slate-500'}`}>{nm}</span>
+                                    </div>
+                                    {isChecked && splitType === 'EXACT' && (
+                                        <input type="number" placeholder="0.00" value={splitData[id]} onChange={e => handleSplitValueChange(id, e.target.value)} className="w-24 px-3 py-1.5 border rounded-lg text-sm font-bold outline-none border-teal-200 focus:border-teal-500 text-right" />
+                                    )}
+                                    {isChecked && splitType === 'PERCENTAGE' && (
+                                        <div className="relative">
+                                            <input type="number" placeholder="0" value={splitData[id]} onChange={e => handleSplitValueChange(id, e.target.value)} className="w-24 pr-8 pl-3 py-1.5 border rounded-lg text-sm font-bold outline-none border-teal-200 focus:border-teal-500 text-right" />
+                                            <span className="absolute right-3 top-1.5 text-slate-400 font-bold text-sm">%</span>
+                                        </div>
+                                    )}
+                                </div>
+                            )})}
+                        </div>
+                        {splitType === 'PERCENTAGE' && (
+                            <p className="mt-2 text-right text-xs font-bold text-slate-400">
+                                Total: {Object.values(splitData).reduce((a,b) => a + (parseFloat(b)||0), 0)}%
+                            </p>
+                        )}
+                        {splitType === 'EXACT' && (
+                            <p className="mt-2 text-right text-xs font-bold text-slate-400">
+                                Total: {formatCurrency(Object.values(splitData).reduce((a,b) => a + (parseFloat(b)||0), 0))} / {formatCurrency(parseFloat(expenseAmount)||0)}
+                            </p>
+                        )}
+                    </div>
+                    <button onClick={handleSubmitExpense} className="mt-4 w-full rounded-xl bg-teal-500 py-4 text-white font-bold text-lg shadow-lg shadow-teal-500/25 transition-all hover:bg-teal-600 active:scale-95">Add Expense</button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* --- ADD MEMBER MODAL --- */}
+      {isAddMemberOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={() => setIsAddMemberOpen(false)}>
+            <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl animate-in" onClick={e => e.stopPropagation()}>
+                <h2 className="text-2xl font-extrabold mb-4">Add Member</h2>
+                <input type="text" value={memberEmail} onChange={e=>setMemberEmail(e.target.value)} placeholder="Email address" className="w-full border rounded-xl px-4 py-3 mb-4 outline-none focus:border-teal-500" />
+                <button onClick={handleAddMember} className="w-full rounded-xl bg-slate-900 py-3 text-white font-bold">Invite</button>
+            </div>
+        </div>
+      )}
+
+      {/* --- SETTLE UP MODAL --- */}
+      {isSettleOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={() => setIsSettleOpen(false)}>
+            <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl animate-in" onClick={e => e.stopPropagation()}>
+                <div className="mb-6 flex items-center justify-between">
+                    <h2 className="text-2xl font-extrabold mb-4">Settle Up</h2>
+                    <button onClick={() => setIsSettleOpen(false)} className="rounded-full p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5"/></button>
+                </div>
+                <div className="space-y-3">
+                {Object.keys(balances).map(key => {
+                    const [whoOwes, whoIsOwed] = key.split(' -> ');
+                    const amount = balances[key];
+                    if (amount <= 0) return null;
+                    let direction = null, otherUserId = null;
+                    if (whoOwes === user.id) { direction = "you_owe"; otherUserId = whoIsOwed; }
+                    else if (whoIsOwed === user.id) { direction = "owes_you"; otherUserId = whoOwes; }
+                    if (!direction) return null;
+                    const otherUser = allUsers.find(u => u.id === otherUserId);
+                    const currentInputAmount = settleAmounts[key] !== undefined ? settleAmounts[key] : amount;
+                    return (
+                        <div key={key} className="flex flex-col gap-2 border p-3 rounded-xl border-slate-100">
+                            <div className="flex items-center gap-4">
+                                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-sm font-bold ${direction === 'you_owe' ? 'border-rose-200 bg-rose-100 text-rose-700' : 'border-teal-200 bg-teal-100 text-teal-700'}`}>
+                                    {otherUser?.name ? otherUser.name.substring(0,2).toUpperCase() : 'U'}
+                                </div>
+                                <div className="flex-1">
+                                    <p className="font-bold">{otherUser?.name || "Unknown"}</p>
+                                    <p className={direction==='you_owe'?'text-rose-600 font-bold text-xs':'text-teal-600 font-bold text-xs'}>{direction==='you_owe'? `you owe ${formatCurrency(amount)}` : `owes you ${formatCurrency(amount)}`}</p>
+                                </div>
+                                <div className="relative w-24">
+                                    <span className="absolute left-3 top-2 text-slate-400 font-bold text-sm">$</span>
                                     <input 
-                                        type="text" 
-                                        placeholder="e.g. Dinner, Taxi, Groceries" 
-                                        value={description}
-                                        onChange={(e) => setDescription(e.target.value)}
-                                        required
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-teal-500 outline-none"
+                                        type="number" 
+                                        value={currentInputAmount} 
+                                        onChange={(e) => handleSettleAmountChange(key, e.target.value)} 
+                                        className="w-full pl-7 pr-2 py-1.5 border rounded-lg text-sm font-bold outline-none border-slate-200 focus:border-teal-500" 
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">How much did it cost?</label>
-                                    <div className="relative">
-                                        <span className="absolute left-4 top-3 text-gray-500 font-bold">$</span>
-                                        <input 
-                                            type="number" 
-                                            placeholder="0.00" 
-                                            step="0.01"
-                                            min="0.01"
-                                            value={amount}
-                                            onChange={(e) => setAmount(e.target.value)}
-                                            required
-                                            className="w-full pl-8 pr-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-teal-500 outline-none"
-                                        />
-                                    </div>
-                                </div>
+                                <button onClick={() => handleSettle(whoOwes, whoIsOwed, currentInputAmount, amount)} className={`px-4 py-2 rounded-lg font-bold text-white shadow-sm ${direction==='you_owe'?'bg-rose-500':'bg-teal-500'}`}>Settle</button>
                             </div>
-                            
-                            <div className="flex justify-end space-x-3 border-t border-gray-100 pt-4">
-                                <button 
-                                    type="button"
-                                    onClick={() => setIsModalOpen(false)}
-                                    className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button 
-                                    type="submit"
-                                    disabled={isSubmitting}
-                                    className="px-6 py-2 bg-teal-500 text-white font-medium rounded-lg hover:bg-teal-600 disabled:opacity-70 transition-colors"
-                                >
-                                    {isSubmitting ? "Saving..." : "Save Expense"}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
+                        </div>
+                    )
+                })}
                 </div>
-            )}
+            </div>
         </div>
-    );
-};
+      )}
 
-export default GroupDetail;
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-[200] max-w-sm rounded-xl bg-slate-900 border border-slate-800 p-4 text-white shadow-2xl animate-bounce">
+            <div className="flex items-center gap-3">
+                <span className="text-xl">⚡</span>
+                <p className="font-medium text-sm">{toastMessage}</p>
+                <button onClick={() => setToastMessage(null)} className="ml-auto text-slate-400 hover:text-white"><X className="h-4 w-4" /></button>
+            </div>
+        </div>
+      )}
+    </div>
+  )
+}

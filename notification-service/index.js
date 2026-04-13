@@ -1,8 +1,13 @@
 // notification-service/index.js
 const amqp = require('amqplib');
 const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: '*' } });
+
 const PORT = process.env.PORT || 3006;
 
 async function startNotificationWorker() {
@@ -11,23 +16,22 @@ async function startNotificationWorker() {
         const connection = await amqp.connect(rabbitUrl);
         const channel = await connection.createChannel();
         
-        const queue = 'expense_created';
-        await channel.assertQueue(queue);
+        const exchange = 'expense_events';
+        await channel.assertExchange(exchange, 'fanout', { durable: false });
         
-        console.log(`🔔 Notification Service listening on queue: ${queue}`);
+        const q = await channel.assertQueue('', { exclusive: true });
+        console.log(`🔔 Notification Service listening on queue: ${q.queue} bound to exchange ${exchange}`);
 
-        channel.consume(queue, (msg) => {
+        channel.bindQueue(q.queue, exchange, '');
+
+        channel.consume(q.queue, (msg) => {
             if (msg !== null) {
                 const event = JSON.parse(msg.content.toString());
                 
-                console.log("\n==========================================");
-                console.log(`📧 SIMULATED EMAIL NOTIFICATION`);
-                console.log(`To: Group ${event.groupId}`);
-                console.log(`Subject: New Expense Added!`);
-                console.log(`Message: A new expense of $${event.splits.reduce((sum, s) => sum + s.amountOwed, 0).toFixed(2)} was just added by User ${event.paidBy.substring(0,8)}...`);
-                console.log("==========================================\n");
+                console.log("Broadcasting to WS connected clients:", event.type || 'expense');
+                io.emit('notification', event);
                 
-                channel.ack(msg); // Mark message as handled
+                channel.ack(msg);
             }
         });
     } catch (error) {
@@ -37,4 +41,4 @@ async function startNotificationWorker() {
 
 startNotificationWorker();
 
-app.listen(PORT, () => console.log(`🔔 Notification Service running on port ${PORT}`));
+server.listen(PORT, () => console.log(`🔔 Notification Service with WS running on port ${PORT}`));

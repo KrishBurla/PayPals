@@ -1,14 +1,50 @@
+import { useCurrency } from '../context/CurrencyContext';
 import React from "react"
 import { ArrowRight, Check } from "lucide-react"
 import { cn } from "../lib/utils"
 
-const memberDebts = [
-  { id: 1, name: "Sarah Chen", initials: "SC", color: "bg-pink-100 text-pink-600", amount: 87.25, direction: "owes_you", lastActivity: "Netflix, Groceries" },
-  { id: 2, name: "Mike Wilson", initials: "MW", color: "bg-blue-100 text-blue-600", amount: 37.08, direction: "you_owe", lastActivity: "Electric Bill" },
-  { id: 3, name: "Emily Davis", initials: "ED", color: "bg-emerald-100 text-emerald-600", amount: 158.55, direction: "owes_you", lastActivity: "Costco" }
-]
 
-export function MemberDebtList() {
+
+export function MemberDebtList({ balances = {}, users = [], currentUser, onSettle }) {
+const { formatCurrency } = useCurrency();
+  
+  const memberDebts = [];
+  let totalNet = 0;
+  
+  Object.keys(balances).forEach(key => {
+      const [whoOwes, whoIsOwed] = key.split(' -> ');
+      const amount = balances[key];
+      if (amount <= 0) return;
+      
+      let direction;
+      let otherUserId;
+      if (whoOwes === currentUser.id) {
+          direction = "you_owe";
+          otherUserId = whoIsOwed;
+          totalNet -= amount;
+      } else if (whoIsOwed === currentUser.id) {
+          direction = "owes_you";
+          otherUserId = whoOwes;
+          totalNet += amount;
+      } else {
+          return;
+      }
+      
+      const otherUser = users.find(u => u.id === otherUserId);
+      const name = otherUser?.name || "Unknown";
+      const initials = name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+      
+      memberDebts.push({
+          id: otherUserId,
+          name,
+          initials,
+          color: direction === "you_owe" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600",
+          amount,
+          direction,
+          lastActivity: "Recent"
+      });
+  });
+  
   return (
     <div className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6">
       <div className="mb-6 flex items-center justify-between">
@@ -33,20 +69,19 @@ export function MemberDebtList() {
               </div>
               <p className="mt-3 text-xs text-slate-500">Last: {debt.lastActivity}</p>
               <div className="mt-4 flex gap-2">
-                <button className="flex flex-1 items-center justify-center rounded-lg h-9 text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-slate-700"><ArrowRight className="mr-1.5 h-3 w-3" /> Remind</button>
-                <button className={cn("flex flex-1 items-center justify-center rounded-lg h-9 text-xs font-bold transition-all active:scale-95", owesYou ? "bg-teal-500 text-white hover:bg-teal-600 shadow-md shadow-teal-500/20" : "bg-slate-900 text-white hover:bg-slate-800")}><Check className="mr-1.5 h-3 w-3" /> {owesYou ? "Record" : "Pay"}</button>
+                <button onClick={onSettle} className="flex flex-1 items-center justify-center rounded-lg h-9 text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-slate-700"><ArrowRight className="mr-1.5 h-3 w-3" /> Remind</button>
+                <button onClick={onSettle} className={cn("flex flex-1 items-center justify-center rounded-lg h-9 text-xs font-bold transition-all active:scale-95", owesYou ? "bg-teal-500 text-white hover:bg-teal-600 shadow-md shadow-teal-500/20" : "bg-slate-900 text-white hover:bg-slate-800")}><Check className="mr-1.5 h-3 w-3" /> {owesYou ? "Record" : "Pay"}</button>
               </div>
             </div>
           )
         })}
       </div>
-
       <div className="mt-6 rounded-2xl bg-teal-50 border border-teal-100 p-5 flex items-center justify-between">
         <div>
           <p className="text-xs font-bold text-teal-600/70 uppercase tracking-wide">Total Balance</p>
-          <p className="text-2xl font-black text-teal-600 tracking-tight">+$158.55</p>
+          <p className={`text-2xl font-black ${totalNet >= 0 ? 'text-teal-600' : 'text-rose-600'} tracking-tight`}>{`${totalNet >= 0 ? '+' : '-'}${Math.abs(totalNet).toFixed(2)}`}</p>
         </div>
-        <button className="rounded-xl bg-teal-500 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-teal-500/20 hover:bg-teal-600 transition-all active:scale-95">Settle All</button>
+        <button onClick={onSettle} className="rounded-xl bg-teal-500 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-teal-500/20 hover:bg-teal-600 transition-all active:scale-95">Settle All</button>
       </div>
     </div>
   )

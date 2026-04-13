@@ -62,7 +62,7 @@ const Register = () => {
                         <input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all bg-slate-50 focus:bg-white font-medium" />
                     </div>
                     
-                    <button type="submit" disabled={isLoading} className="w-full mt-2 bg-teal-500 hover:bg-teal-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-teal-500/30 transition-all active:scale-95 disabled:opacity-70 flex justify-center items-center">
+                    <button type="submit" disabled={isLoading} className="w-full mt-2 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition-all active:scale-95 disabled:opacity-70 flex justify-center items-center">
                         {isLoading ? "Creating Account..." : "Sign Up"}
                     </button>
                 </form>

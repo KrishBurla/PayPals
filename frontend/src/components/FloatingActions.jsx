@@ -1,14 +1,13 @@
 import React, { useState } from "react"
-import { Plus, Receipt, Users, Wallet } from "lucide-react"
+import { Plus, Receipt, Wallet } from "lucide-react"
 
 export function FloatingActions({ onAddExpense, onSettle }) {
   const [isOpen, setIsOpen] = useState(false)
 
   const actions = [
-    { icon: Receipt, label: "Add Expense", color: "bg-teal-500 hover:bg-teal-600", onClick: onAddExpense },
-    { icon: Wallet, label: "Settle Up", color: "bg-slate-900 hover:bg-slate-800", onClick: onSettle },
-    { icon: Users, label: "Split Bill", color: "bg-blue-500 hover:bg-blue-600", onClick: () => console.log('Split Bill') },
-  ]
+    ...(onAddExpense ? [{ icon: Receipt, label: "Add Expense", color: "bg-teal-500 hover:bg-teal-600", onClick: onAddExpense }] : []),
+    ...(onSettle ? [{ icon: Wallet, label: "Settle Up", color: "bg-slate-900 hover:bg-slate-800", onClick: onSettle }] : [])
+  ];
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col-reverse items-end gap-3 lg:hidden">

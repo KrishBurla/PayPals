@@ -8,25 +8,37 @@ exports.startConsumer = async () => {
         const connection = await amqp.connect(rabbitUrl);
         const channel = await connection.createChannel();
         
-        const queue = 'expense_created';
-        await channel.assertQueue(queue);
+        const exchange = 'expense_events';
+        await channel.assertExchange(exchange, 'fanout', { durable: false });
         
-        console.log(`🎧 Settlement Service listening on queue: ${queue}`);
+        // Let RabbitMQ create an exclusive, temporary queue for this consumer
+        const q = await channel.assertQueue('', { exclusive: true });
+        
+        console.log(`🎧 Settlement Service listening on queue: ${q.queue} bound to exchange ${exchange}`);
 
-        channel.consume(queue, async (msg) => {
+        channel.bindQueue(q.queue, exchange, '');
+
+        channel.consume(q.queue, async (msg) => {
             if (msg !== null) {
                 const event = JSON.parse(msg.content.toString());
                 
-                // Update Balances in Redis
-                // Graph logic: User B owes User A (the payer)
-                for (let split of event.splits) {
-                    if (split.userId !== event.paidBy) {
-                        // Key format: balance:{groupId}:{whoOwes}:{whoIsOwed}
-                        const redisKey = `balance:${event.groupId}:${split.userId}:${event.paidBy}`;
-                        
-                        // Increment the debt by the amount owed
-                        await redisClient.incrByFloat(redisKey, split.amountOwed);
-                        console.log(`Updated balance: ${split.userId} owes ${event.paidBy} $${split.amountOwed}`);
+                // Handle settlement
+                if (event.type === 'settle') {
+                    const redisKey = `balance:${event.groupId}:${event.borrowerId}:${event.lenderId}`;
+                    await redisClient.incrByFloat(redisKey, -event.amount);
+                    console.log(`Updated balance: ${event.borrowerId} paid ${event.lenderId} $${event.amount}`);
+                } else if (event.splits) {
+                    // Update Balances in Redis for Expenses
+                    // Graph logic: User B owes User A (the payer)
+                    for (let split of event.splits) {
+                        if (split.userId !== event.paidBy) {
+                            // Key format: balance:{groupId}:{whoOwes}:{whoIsOwed}
+                            const redisKey = `balance:${event.groupId}:${split.userId}:${event.paidBy}`;
+                            
+                            // Increment the debt by the amount owed
+                            await redisClient.incrByFloat(redisKey, split.amountOwed);
+                            console.log(`Updated balance: ${split.userId} owes ${event.paidBy} $${split.amountOwed}`);
+                        }
                     }
                 }
                 
@@ -39,6 +51,37 @@ exports.startConsumer = async () => {
 };
 
 // 📊 Get Group Balances
+const { publishToExchange } = require('../../shared/rabbitmq') || {};
+const amqpLocal = require('amqplib');
+
+exports.settleUp = async (req, res) => {
+    try {
+        const { groupId, borrowerId, lenderId, amount } = req.body;
+        
+        let pQueue = publishToExchange;
+        if (!pQueue) {
+            pQueue = async (ex, d) => {
+                const rabbitUrl = process.env.RABBITMQ_URL || 'amqp://localhost';
+                const connection = await amqpLocal.connect(rabbitUrl);
+                const channel = await connection.createChannel();
+                await channel.assertExchange(ex, 'fanout', { durable: false });
+                channel.publish(ex, '', Buffer.from(JSON.stringify(d)));
+                setTimeout(() => { connection.close(); }, 500);
+            };
+        }
+        
+        await pQueue('expense_events', {
+            type: 'settle',
+            groupId, borrowerId, lenderId, amount
+        });
+        
+        res.status(200).json({ message: "Settle queued successfully" });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Settle error" });
+    }
+};
+
 exports.getBalances = async (req, res) => {
     try {
         const { groupId } = req.params;

@@ -1,144 +1,141 @@
-import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import React, { useState, useContext, useEffect } from 'react';
 import { Sidebar } from '../components/Sidebar';
-import { GroupHeader } from '../components/GroupHeader';
-import { BalanceCard } from '../components/BalanceCard';
-import { ExpenseLedger } from '../components/ExpenseLedger';
-import { MemberDebtList } from '../components/MemberDebtList';
-import { MonthlyChart, CategorySpending, QuickStats, ActivityFeed } from '../components/Analytics';
+import { CurrencyContext } from '../context/CurrencyContext';
+import { AuthContext } from '../context/AuthContext';
+import { ActivityFeed } from '../components/Analytics';
 import { FloatingActions } from '../components/FloatingActions';
+import api from '../services/api';
+import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isSettleOpen, setIsSettleOpen] = useState(false);
+  const { user } = useContext(AuthContext);
+  const { formatCurrency } = useContext(CurrencyContext);
+
+  const [groups, setGroups] = useState([]);
+  const [isGroupSelectOpen, setIsGroupSelectOpen] = useState(false);
+  const navigate = useNavigate();
+  const [globalBalances, setGlobalBalances] = useState({ totalOwe: 0, totalOwed: 0, totalExpenses: 0 });
+  const [allExpenses, setAllExpenses] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
+
+  useEffect(() => {
+    api.get('/auth/users').then(res => setAllUsers(res.data)).catch(console.error);
+
+    if (user?.id) {
+        api.get('/groups/user').then(async res => {
+            setGroups(res.data);
+
+            let totalOweGlobal = 0;
+            let totalOwedGlobal = 0;
+            let totalExpensesGlobal = 0;
+            let combinedExpenses = [];
+
+            const balPromises = res.data.map(g => api.get(`/settlements/balances/${g._id}`));
+            const expPromises = res.data.map(g => api.get(`/expenses/group/${g._id}`));
+            
+            const balResults = await Promise.all(balPromises);
+            const expResults = await Promise.all(expPromises);
+            
+            balResults.forEach(bRes => {
+                const bals = bRes.data.balances || {};
+                Object.keys(bals).forEach(key => {
+                    const [whoOwes, whoIsOwed] = key.split(' -> ');
+                    if (whoOwes === user.id) totalOweGlobal += bals[key];
+                    else if (whoIsOwed === user.id) totalOwedGlobal += bals[key];
+                });
+            });
+
+            expResults.forEach((eRes, idx) => {
+                const groupName = res.data[idx].name;
+                eRes.data.forEach(ex => {
+                    ex.groupName = groupName;
+                    combinedExpenses.push(ex);
+                    if (ex.paidBy === user.id) totalExpensesGlobal += ex.amount;
+                });
+            });
+
+            combinedExpenses.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+            setAllExpenses(combinedExpenses.slice(0, 15)); // Top 15 recent global expenses
+
+            setGlobalBalances({ totalOwe: totalOweGlobal, totalOwed: totalOwedGlobal, totalExpenses: totalExpensesGlobal });
+        }).catch(console.error);
+    }
+  }, [user]);
+
+  if (!user) return null;
 
   return (
-    // THE FIX: Standard block layout. Do NOT use 'flex' here.
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
-      
       <Sidebar />
-      
-      {/* THE MAGIC OFFSET: lg:ml-72 pushes the main content right by exactly 18rem (w-72) on desktop to make room for the fixed sidebar. */}
       <main className="transition-all duration-300 ease-in-out lg:ml-72">
-        {/* pt-24 on mobile pushes content down so it doesn't hide behind the hamburger menu. lg:pt-8 restores normal padding. */}
         <div className="mx-auto max-w-[1600px] p-6 pt-24 lg:p-8 lg:pt-8">
           
-          <GroupHeader onAddExpense={() => setIsAddOpen(true)} />
-          
-          <div className="mt-8 grid gap-8 xl:grid-cols-3">
-            {/* Left Column */}
-            <div className="flex min-w-0 flex-col gap-8 xl:col-span-2">
-              <BalanceCard onSettle={() => setIsSettleOpen(true)} />
-              <MonthlyChart />
-              <ExpenseLedger />
-            </div>
-            
-            {/* Right Column */}
-            <div className="flex min-w-0 flex-col gap-8 xl:col-span-1">
-              <MemberDebtList onSettle={() => setIsSettleOpen(true)} />
-              <CategorySpending />
-              <QuickStats />
-              <ActivityFeed />
-            </div>
+          <h1 className="text-3xl font-black mb-6">Welcome Back, {user.name ? user.name.split(' ')[0] : 'User'}! 👋</h1>
+
+          {/* GLOBAL PORTFOLIO */}
+          <div className="mb-8 p-8 md:p-10 rounded-3xl bg-slate-900 text-white shadow-2xl shadow-slate-900/20 relative overflow-hidden">
+             <div className="absolute top-0 right-0 p-10 opacity-10 blur-2xl"><div className="w-64 h-64 bg-teal-500 rounded-full"></div></div>
+             <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-8">
+                 <div>
+                     <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mb-2">Global Portfolio</p>
+                     <h2 className="text-4xl font-black mb-1">{groups.length}</h2>
+                     <p className="text-sm font-medium text-slate-500">Active Groups</p>
+                 </div>
+                 <div>
+                     <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mb-2">Total You're Owed</p>
+                     <p className="text-4xl font-black text-teal-400">{formatCurrency(globalBalances.totalOwed)}</p>
+                     <p className="text-sm font-medium text-slate-500">Across all groups</p>
+                 </div>
+                 <div>
+                     <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mb-2">Total You Owe</p>
+                     <p className="text-4xl font-black text-rose-400">{formatCurrency(globalBalances.totalOwe)}</p>
+                     <p className="text-sm font-medium text-slate-500">Across all groups</p>
+                 </div>
+             </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+              <div className="xl:col-span-2 space-y-8">
+                  <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+                      <h2 className="text-xl font-bold mb-6">Your Lifetime Statistics</h2>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="p-6 rounded-2xl bg-indigo-50 border border-indigo-100">
+                             <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-2">Total Handled</p>
+                             <p className="text-3xl font-black text-indigo-700">{formatCurrency(globalBalances.totalExpenses)}</p>
+                          </div>
+                          <div className="p-6 rounded-2xl bg-teal-50 border border-teal-100">
+                             <p className="text-xs font-bold text-teal-400 uppercase tracking-wider mb-2">Items Paid For</p>
+                             <p className="text-3xl font-black text-teal-700">{allExpenses.filter(e => e.paidBy === user.id).length} items</p>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+              <div className="xl:col-span-1">
+                  <ActivityFeed rawExpenses={allExpenses} users={allUsers} isGlobal={true} />
+              </div>
           </div>
         </div>
-
-        {/* Floating Action Button */}
-        <FloatingActions 
-            onAddExpense={() => setIsAddOpen(true)} 
-            onSettle={() => setIsSettleOpen(true)} 
-        />
+        <FloatingActions onAddExpense={() => setIsGroupSelectOpen(true)} />
       </main>
 
-      {/* --- ADD EXPENSE MODAL --- */}
-      {isAddOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={() => setIsAddOpen(false)}>
-            <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl" onClick={e => e.stopPropagation()}>
-                <div className="mb-6 flex items-center justify-between">
-                    <h2 className="text-2xl font-extrabold text-slate-900">Add Expense</h2>
-                    <button onClick={() => setIsAddOpen(false)} className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"><X className="h-5 w-5"/></button>
-                </div>
-                <div className="space-y-5">
-                    <div>
-                        <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Description</label>
-                        <input type="text" placeholder="e.g. Dinner at Olive Garden" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 font-medium text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Amount</label>
-                            <div className="relative">
-                                <span className="absolute left-4 top-3.5 font-bold text-slate-400">$</span>
-                                <input type="number" placeholder="0.00" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-8 pr-4 font-bold text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20" />
-                            </div>
-                        </div>
-                        <div>
-                            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Category</label>
-                            <select className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 font-bold text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20">
-                                <option>🍽️ Food</option>
-                                <option>🏠 Housing</option>
-                                <option>🚗 Transport</option>
-                                <option>📺 Subscriptions</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div>
-                        <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Paid By</label>
-                        <select className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 font-bold text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20">
-                            <option>You</option>
-                            <option>Sarah Chen</option>
-                            <option>Mike Wilson</option>
-                            <option>Emily Davis</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className="mb-3 block text-xs font-bold uppercase tracking-wider text-slate-500">Split Between</label>
-                        <div className="flex flex-wrap gap-2">
-                            {["You", "Sarah", "Mike", "Emily"].map(name => (
-                                <label key={name} className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 transition-colors hover:border-teal-300 hover:bg-teal-50/50">
-                                    <input type="checkbox" defaultChecked className="h-4 w-4 rounded border-slate-300 accent-teal-500 text-teal-500 focus:ring-teal-500" />
-                                    <span className="text-sm font-bold text-slate-700">{name}</span>
-                                </label>
-                            ))}
-                        </div>
-                    </div>
-                    <button onClick={() => setIsAddOpen(false)} className="mt-4 w-full rounded-xl bg-teal-500 py-4 text-lg font-bold text-white shadow-lg shadow-teal-500/25 transition-all hover:bg-teal-600 active:scale-95">
-                        Add Expense
+      {isGroupSelectOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={() => setIsGroupSelectOpen(false)}>
+            <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl animate-in" onClick={e => e.stopPropagation()}>
+                <div className="mb-4 flex items-center justify-between">
+                    <h2 className="text-xl font-extrabold text-slate-900">Which Group?</h2>
+                    <button onClick={() => setIsGroupSelectOpen(false)} className="rounded-full p-2 text-slate-400 hover:bg-slate-100">
+                        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
                     </button>
                 </div>
-            </div>
-        </div>
-      )}
-
-      {/* --- SETTLE UP MODAL --- */}
-      {isSettleOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={() => setIsSettleOpen(false)}>
-            <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl" onClick={e => e.stopPropagation()}>
-                <div className="mb-6 flex items-center justify-between">
-                    <h2 className="text-2xl font-extrabold text-slate-900">Settle Up</h2>
-                    <button onClick={() => setIsSettleOpen(false)} className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"><X className="h-5 w-5"/></button>
+                <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
+                    {groups.map(g => (
+                        <button key={g._id} onClick={() => navigate(`/group/${g._id}?add=true`)} className="w-full text-left p-4 rounded-xl border border-slate-100 hover:border-teal-300 hover:bg-teal-50 transition-colors flex items-center justify-between group-btn">
+                            <span className="font-bold text-slate-700">{g.name}</span>
+                            <span className="text-slate-400">→</span>
+                        </button>
+                    ))}
+                    {groups.length === 0 && <p className="text-sm text-slate-500 text-center py-4">You are not in any groups yet.</p>}
                 </div>
-                <p className="mb-5 text-sm font-medium text-slate-500">Choose who you want to settle with:</p>
-                <div className="mb-6 space-y-3">
-                    <div className="flex cursor-pointer items-center gap-4 rounded-xl border border-slate-100 bg-slate-50 p-3.5 transition-colors hover:border-slate-300 hover:bg-slate-100">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-teal-200 bg-teal-100 text-sm font-bold text-teal-700">SC</div>
-                        <div className="flex-1 min-w-0">
-                            <p className="truncate text-sm font-bold text-slate-900">Sarah Chen</p>
-                            <p className="truncate text-xs font-semibold text-teal-600">owes you $87.25</p>
-                        </div>
-                        <button className="rounded-lg border border-teal-200 bg-white px-4 py-2 text-xs font-bold text-teal-700 shadow-sm transition-colors hover:bg-teal-50">Remind</button>
-                    </div>
-                    <div className="flex cursor-pointer items-center gap-4 rounded-xl border border-slate-100 bg-slate-50 p-3.5 transition-colors hover:border-slate-300 hover:bg-slate-100">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-100 text-sm font-bold text-rose-700">MW</div>
-                        <div className="flex-1 min-w-0">
-                            <p className="truncate text-sm font-bold text-slate-900">Mike Wilson</p>
-                            <p className="truncate text-xs font-semibold text-rose-600">you owe $37.08</p>
-                        </div>
-                        <button className="rounded-lg border border-rose-200 bg-white px-4 py-2 text-xs font-bold text-rose-700 shadow-sm transition-colors hover:bg-rose-50">Pay</button>
-                    </div>
-                </div>
-                <button onClick={() => setIsSettleOpen(false)} className="w-full rounded-xl bg-slate-900 py-4 text-base font-bold text-white shadow-lg transition-all hover:bg-slate-800 active:scale-95">
-                    Settle All Debts
-                </button>
             </div>
         </div>
       )}

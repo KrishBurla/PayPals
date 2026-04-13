@@ -2,7 +2,8 @@ const Group = require('../models/Group');
 
 exports.createGroup = async (req, res) => {
     try {
-        const { name, createdBy, members } = req.body;
+        const { name, members } = req.body;
+        const createdBy = req.body.createdBy || req.headers['x-user-id'];
         
         // Ensure the creator is in the members list
         const groupMembers = members ? [...new Set([...members, createdBy])] : [createdBy];
@@ -42,5 +43,22 @@ exports.getUserGroups = async (req, res) => {
         res.status(200).json(groups);
     } catch (error) {
         res.status(500).json({ error: "Error fetching user groups" });
+    }
+};
+
+exports.addMember = async (req, res) => {
+    try {
+        const { userId } = req.body;
+        const group = await Group.findById(req.params.id);
+        if (!group) return res.status(404).json({ error: "Group not found" });
+
+        if (!group.members.includes(userId)) {
+            group.members.push(userId);
+            await group.save();
+        }
+
+        res.status(200).json({ message: "Member added", group });
+    } catch (error) {
+        res.status(500).json({ error: "Error adding member" });
     }
 };

@@ -46,3 +46,12 @@ exports.login = async (req, res) => {
         res.status(500).json({ error: "Server error during login" });
     }
 };
+
+exports.getUsers = async (req, res) => {
+    try {
+        const [rows] = await db.execute('SELECT id, name, email FROM users');
+        res.status(200).json(rows);
+    } catch (error) {
+        res.status(500).json({ error: "Server error fetching users" });
+    }
+};
