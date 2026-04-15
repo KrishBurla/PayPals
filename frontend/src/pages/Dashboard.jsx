@@ -47,6 +47,17 @@ export default function Dashboard() {
         api.get('/groups/user').then(async res => {
             setGroups(res.data);
 
+            let totalOweGlobal = 0;
+            let totalOwedGlobal = 0;
+            let totalExpensesGlobal = 0;
+            let combinedExpenses = [];
+
+            const balPromises = res.data.map(g => api.get(`/settlements/balances/${g._id}`));
+            const expPromises = res.data.map(g => api.get(`/expenses/group/${g._id}`));
+            
+            const balResults = await Promise.all(balPromises);
+            const expResults = await Promise.all(expPromises);
+
             const netUserBals = {};
 
             balResults.forEach((bRes, idx) => {
