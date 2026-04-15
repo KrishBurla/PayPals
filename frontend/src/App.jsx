@@ -9,11 +9,13 @@ import GroupDetail from './pages/GroupDetail';
 import GroupsPage from './pages/Groups';
 import Settings from './pages/Settings';
 import { Sidebar } from './components/Sidebar';
+import { Toaster } from 'react-hot-toast';
 
 function App() {
     return (
         <AuthProvider>
             <CurrencyProvider>
+                <Toaster position="top-right" reverseOrder={false} />
                 <Router>
                     <Routes>
                         <Route path="/" element={<Navigate to="/login" />} />

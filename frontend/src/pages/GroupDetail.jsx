@@ -227,7 +227,7 @@ export default function GroupDetail() {
               <ExpenseLedger expenses={expenses} users={allUsers} currentUser={user} onExpenseUpdated={refreshData} />
             </div>
             <div className="flex min-w-0 flex-col gap-8 xl:col-span-1">
-              <MemberDebtList onSettle={() => setIsSettleOpen(true)} onRemind={handleRemind} balances={balances} users={allUsers} currentUser={user} />
+              <MemberDebtList onSettle={() => setIsSettleOpen(true)} onRemind={handleRemind} balances={balances} users={allUsers} currentUser={user} expenses={expenses} />
               <CategorySpending rawExpenses={expenses} />
               <QuickStats rawExpenses={expenses} currentUser={user} balances={balances} activeGroup={activeGroup} />
               <ActivityFeed rawExpenses={expenses} users={allUsers} />
@@ -369,40 +369,61 @@ export default function GroupDetail() {
                     <button onClick={() => setIsSettleOpen(false)} className="rounded-full p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5"/></button>
                 </div>
                 <div className="space-y-3">
-                {Object.keys(balances).map(key => {
-                    const [whoOwes, whoIsOwed] = key.split(' -> ');
-                    const amount = balances[key];
-                    if (amount <= 0) return null;
-                    let direction = null, otherUserId = null;
-                    if (whoOwes === user.id) { direction = "you_owe"; otherUserId = whoIsOwed; }
-                    else if (whoIsOwed === user.id) { direction = "owes_you"; otherUserId = whoOwes; }
-                    if (!direction) return null;
-                    const otherUser = allUsers.find(u => u.id === otherUserId);
-                    const currentInputAmount = settleAmounts[key] !== undefined ? settleAmounts[key] : (amount * multiplier).toFixed(2);
-                    return (
-                        <div key={key} className="flex flex-col gap-2 border p-3 rounded-xl border-slate-100">
-                            <div className="flex items-center gap-4">
-                                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-sm font-bold ${direction === 'you_owe' ? 'border-rose-200 bg-rose-100 text-rose-700' : 'border-teal-200 bg-teal-100 text-teal-700'}`}>
-                                    {otherUser?.name ? otherUser.name.substring(0,2).toUpperCase() : 'U'}
+                {(() => {
+                    const netBals = {};
+                    Object.keys(balances).forEach(key => {
+                        const [whoOwes, whoIsOwed] = key.split(' -> ');
+                        const amount = balances[key];
+                        if (amount <= 0) return;
+                        
+                        let otherUserId, mult;
+                        if (whoOwes === user.id) { otherUserId = whoIsOwed; mult = -1; }
+                        else if (whoIsOwed === user.id) { otherUserId = whoOwes; mult = 1; }
+                        else return;
+                        
+                        if (!netBals[otherUserId]) netBals[otherUserId] = 0;
+                        netBals[otherUserId] += (amount * mult);
+                    });
+
+                    return Object.keys(netBals).map(otherUserId => {
+                        const netAmount = netBals[otherUserId];
+                        if (Math.abs(netAmount) < 0.01) return null;
+                        
+                        const direction = netAmount > 0 ? "owes_you" : "you_owe";
+                        const displayAmount = Math.abs(netAmount);
+                        const otherUser = allUsers.find(u => u.id === otherUserId);
+                        
+                        const currentInputAmount = settleAmounts[otherUserId] !== undefined ? settleAmounts[otherUserId] : (displayAmount * multiplier).toFixed(2);
+                        
+                        return (
+                            <div key={otherUserId} className="flex flex-col gap-2 border p-3 rounded-xl border-slate-100">
+                                <div className="flex items-center gap-4">
+                                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-sm font-bold ${direction === 'you_owe' ? 'border-rose-200 bg-rose-100 text-rose-700' : 'border-teal-200 bg-teal-100 text-teal-700'}`}>
+                                        {otherUser?.name ? otherUser.name.substring(0,2).toUpperCase() : 'U'}
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-bold">{otherUser?.name || "Unknown"}</p>
+                                        <p className={direction==='you_owe'?'text-rose-600 font-bold text-xs':'text-teal-600 font-bold text-xs'}>{direction==='you_owe'? `you owe net ${formatCurrency(displayAmount)}` : `owes you net ${formatCurrency(displayAmount)}`}</p>
+                                    </div>
+                                    <div className="relative w-24">
+                                        <span className="absolute left-3 top-2 text-slate-400 font-bold text-sm">{formatCurrency(0).charAt(0)}</span>
+                                        <input 
+                                            type="number" 
+                                            value={currentInputAmount} 
+                                            onChange={(e) => handleSettleAmountChange(otherUserId, e.target.value)} 
+                                            className="w-full pl-7 pr-2 py-1.5 border rounded-lg text-sm font-bold outline-none border-slate-200 focus:border-teal-500" 
+                                        />
+                                    </div>
+                                    <button onClick={() => {
+                                        const borrower = direction === 'you_owe' ? user.id : otherUserId;
+                                        const lender = direction === 'you_owe' ? otherUserId : user.id;
+                                        handleSettle(borrower, lender, settleAmounts[otherUserId], displayAmount);
+                                    }} className={`px-4 py-2 rounded-lg font-bold text-white shadow-sm ${direction==='you_owe'?'bg-rose-500':'bg-teal-500'}`}>Settle</button>
                                 </div>
-                                <div className="flex-1">
-                                    <p className="font-bold">{otherUser?.name || "Unknown"}</p>
-                                    <p className={direction==='you_owe'?'text-rose-600 font-bold text-xs':'text-teal-600 font-bold text-xs'}>{direction==='you_owe'? `you owe ${formatCurrency(amount)}` : `owes you ${formatCurrency(amount)}`}</p>
-                                </div>
-                                <div className="relative w-24">
-                                    <span className="absolute left-3 top-2 text-slate-400 font-bold text-sm">{formatCurrency(0).charAt(0)}</span>
-                                    <input 
-                                        type="number" 
-                                        value={currentInputAmount} 
-                                        onChange={(e) => handleSettleAmountChange(key, e.target.value)} 
-                                        className="w-full pl-7 pr-2 py-1.5 border rounded-lg text-sm font-bold outline-none border-slate-200 focus:border-teal-500" 
-                                    />
-                                </div>
-                                <button onClick={() => handleSettle(whoOwes, whoIsOwed, settleAmounts[key], amount)} className={`px-4 py-2 rounded-lg font-bold text-white shadow-sm ${direction==='you_owe'?'bg-rose-500':'bg-teal-500'}`}>Settle</button>
                             </div>
-                        </div>
-                    )
-                })}
+                        )
+                    });
+                })()}
                 </div>
             </div>
         </div>

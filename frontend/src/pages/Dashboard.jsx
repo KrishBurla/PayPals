@@ -6,10 +6,31 @@ import { ActivityFeed } from '../components/Analytics';
 import { FloatingActions } from '../components/FloatingActions';
 import api from '../services/api';
 import { useNavigate } from 'react-router-dom';
+import { io } from 'socket.io-client';
+import toast from 'react-hot-toast';
+import { ChevronDown, ChevronUp, Receipt } from "lucide-react";
 
 export default function Dashboard() {
   const { user } = useContext(AuthContext);
   const { formatCurrency } = useContext(CurrencyContext);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const socket = io('http://localhost:3006', { query: { userId: user.id } });
+    
+    socket.on('notification', (data) => {
+        toast.success(data.message || 'New notification', {
+            style: {
+                background: '#0f172a',
+                color: '#ffffff',
+                borderRadius: '16px',
+            },
+            icon: '💸'
+        });
+    });
+
+    return () => socket.disconnect();
+  }, [user]);
 
   const [groups, setGroups] = useState([]);
   const [isGroupSelectOpen, setIsGroupSelectOpen] = useState(false);
@@ -17,6 +38,7 @@ export default function Dashboard() {
   const [globalBalances, setGlobalBalances] = useState({ totalOwe: 0, totalOwed: 0, totalExpenses: 0 });
   const [allExpenses, setAllExpenses] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
+  const [expandedFriendId, setExpandedFriendId] = useState(null);
 
   useEffect(() => {
     api.get('/auth/users').then(res => setAllUsers(res.data)).catch(console.error);
@@ -25,25 +47,42 @@ export default function Dashboard() {
         api.get('/groups/user').then(async res => {
             setGroups(res.data);
 
-            let totalOweGlobal = 0;
-            let totalOwedGlobal = 0;
-            let totalExpensesGlobal = 0;
-            let combinedExpenses = [];
+            const netUserBals = {};
 
-            const balPromises = res.data.map(g => api.get(`/settlements/balances/${g._id}`));
-            const expPromises = res.data.map(g => api.get(`/expenses/group/${g._id}`));
-            
-            const balResults = await Promise.all(balPromises);
-            const expResults = await Promise.all(expPromises);
-            
-            balResults.forEach(bRes => {
+            balResults.forEach((bRes, idx) => {
+                const groupName = res.data[idx].name;
                 const bals = bRes.data.balances || {};
                 Object.keys(bals).forEach(key => {
                     const [whoOwes, whoIsOwed] = key.split(' -> ');
-                    if (whoOwes === user.id) totalOweGlobal += bals[key];
-                    else if (whoIsOwed === user.id) totalOwedGlobal += bals[key];
+                    const amount = bals[key];
+                    if (amount <= 0) return;
+                    
+                    let otherUserId = null;
+                    let amountNet = 0;
+                    if (whoOwes === user.id) {
+                        otherUserId = whoIsOwed;
+                        amountNet = -amount;
+                        totalOweGlobal += amount;
+                    } else if (whoIsOwed === user.id) {
+                        otherUserId = whoOwes;
+                        amountNet = amount;
+                        totalOwedGlobal += amount;
+                    } else {
+                        return;
+                    }
+
+                    if (!netUserBals[otherUserId]) netUserBals[otherUserId] = { net: 0, breakdowns: [] };
+                    netUserBals[otherUserId].net += amountNet;
+                    netUserBals[otherUserId].breakdowns.push({ groupName, amount: amountNet, isNegative: amountNet < 0 });
                 });
             });
+
+            // Convert to friends array
+            const friendsBalances = Object.keys(netUserBals).map(uid => ({
+                id: uid,
+                net: netUserBals[uid].net,
+                breakdowns: netUserBals[uid].breakdowns
+            })).filter(f => Math.abs(f.net) > 0.01);
 
             expResults.forEach((eRes, idx) => {
                 const groupName = res.data[idx].name;
@@ -57,7 +96,12 @@ export default function Dashboard() {
             combinedExpenses.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
             setAllExpenses(combinedExpenses.slice(0, 15)); // Top 15 recent global expenses
 
-            setGlobalBalances({ totalOwe: totalOweGlobal, totalOwed: totalOwedGlobal, totalExpenses: totalExpensesGlobal });
+            setGlobalBalances({ 
+                totalOwe: totalOweGlobal, 
+                totalOwed: totalOwedGlobal, 
+                totalExpenses: totalExpensesGlobal,
+                friends: friendsBalances
+            });
         }).catch(console.error);
     }
   }, [user]);
@@ -96,6 +140,68 @@ export default function Dashboard() {
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
               <div className="xl:col-span-2 space-y-8">
+                  {/* OVERALL FRIEND/USER BALANCES (Added per Request) */}
+                  <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+                      <h2 className="text-xl font-bold mb-6">Friends Overall Balance</h2>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {globalBalances.friends?.length > 0 ? (
+                              globalBalances.friends.map(f => {
+                                  const friendUser = allUsers.find(u => u.id === f.id);
+                                  const name = friendUser?.name || "Unknown";
+                                  const initials = name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+                                  const owesYou = f.net > 0;
+                                  const isExpanded = expandedFriendId === f.id;
+                                  
+                                  return (
+                                      <div key={f.id} className="flex flex-col rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors overflow-hidden">
+                                          <div className="flex items-center justify-between p-4">
+                                              <div className="flex items-center gap-3">
+                                                  <div className={`h-10 w-10 rounded-full flex items-center justify-center text-xs font-bold border shadow-sm ${owesYou ? 'bg-teal-100 text-teal-700 border-teal-200' : 'bg-rose-100 text-rose-700 border-rose-200'}`}>
+                                                      {initials}
+                                                  </div>
+                                                  <div>
+                                                      <p className="text-sm font-bold text-slate-900">{name}</p>
+                                                      <p className={`text-xs font-semibold ${owesYou ? 'text-teal-600' : 'text-rose-600'}`}>{owesYou ? 'owes you net' : 'you owe net'}</p>
+                                                  </div>
+                                              </div>
+                                              <p className={`text-lg font-black ${owesYou ? 'text-teal-600' : 'text-rose-600'}`}>
+                                                  {formatCurrency(Math.abs(f.net))}
+                                              </p>
+                                          </div>
+                                          
+                                          <div className="px-4 pb-4">
+                                              <button 
+                                                  onClick={() => setExpandedFriendId(isExpanded ? null : f.id)} 
+                                                  className="w-full flex items-center justify-center gap-1.5 rounded-lg h-8 text-[11px] font-bold border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all"
+                                              >
+                                                  Breakdown {isExpanded ? <ChevronUp className="h-3 w-3"/> : <ChevronDown className="h-3 w-3"/>}
+                                              </button>
+                                          </div>
+
+                                          {isExpanded && (
+                                              <div className="border-t border-slate-100 bg-slate-100/50 p-4">
+                                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Per-Group Net Math</p>
+                                                  <div className="bg-white rounded-lg border border-slate-200 p-3 space-y-2 max-h-[120px] overflow-y-auto">
+                                                      {f.breakdowns.map((r, i) => (
+                                                          <div key={i} className="flex justify-between items-center text-xs">
+                                                              <span className="font-semibold text-slate-700 truncate max-w-[150px]">{r.groupName}</span>
+                                                              <span className={`font-bold ${r.isNegative ? 'text-rose-600' : 'text-teal-600'}`}>
+                                                                  {r.isNegative ? '-' : '+'}{formatCurrency(Math.abs(r.amount))}
+                                                              </span>
+                                                          </div>
+                                                      ))}
+                                                  </div>
+                                              </div>
+                                          )}
+                                      </div>
+                                  );
+                              })
+                          ) : (
+                              <p className="text-sm text-slate-500 font-medium">You are all settled up with everyone across all groups! 🎉</p>
+                          )}
+                      </div>
+                  </div>
+
                   <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
                       <h2 className="text-xl font-bold mb-6">Your Lifetime Statistics</h2>
                       <div className="grid grid-cols-2 gap-4">
