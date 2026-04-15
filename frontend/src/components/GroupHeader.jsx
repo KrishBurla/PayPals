@@ -22,7 +22,7 @@ export function GroupHeader({ onAddExpense, onAddMember, group, users, totalExpe
         </div>
         <div className="mt-2 flex items-center gap-2 text-slate-500">
           <TrendingUp className="h-4 w-4 text-teal-500" />
-          <span className="text-sm"><span className="font-bold text-slate-900">${(totalExpenses||0).toFixed(2)}</span> spent</span>
+          <span className="text-sm"><span className="font-bold text-slate-900">{formatCurrency(totalExpenses || 0)}</span> spent</span>
         </div>
       </div>
 

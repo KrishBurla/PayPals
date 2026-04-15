@@ -3,18 +3,22 @@ import React, { createContext, useState, useContext } from 'react';
 export const CurrencyContext = createContext();
 
 export const CurrencyProvider = ({ children }) => {
-    // defaults to 'USD'
-    const [currency, setCurrency] = useState('USD');
+    const [currency, setCurrencyState] = useState(() => {
+        return localStorage.getItem('paypals_currency') || 'USD';
+    });
     const MULTIPLIER = 95;
 
-    // A helper method that takes any raw internal USD amount 
-    // and returns the beautifully formatted localized string!
+    const setCurrency = (val) => {
+        localStorage.setItem('paypals_currency', val);
+        setCurrencyState(val);
+    };
+
     const formatCurrency = (amount) => {
+        const num = Number(amount) || 0;
         if (currency === 'INR') {
-            return `₹${(amount * MULTIPLIER).toFixed(2)}`;
+            return `₹${(num * MULTIPLIER).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         }
-        // Default USD
-        return `$${amount.toFixed(2)}`;
+        return `$${num.toFixed(2)}`;
     };
 
     return (

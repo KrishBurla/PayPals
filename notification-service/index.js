@@ -2,9 +2,13 @@
 const amqp = require('amqplib');
 const express = require('express');
 const http = require('http');
+const cors = require('cors');
 const { Server } = require('socket.io');
 
 const app = express();
+app.use(express.json());
+app.use(cors());
+
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
@@ -16,6 +20,24 @@ io.on('connection', (socket) => {
     }
 });
 
+// POST /remind — send a targeted reminder notification
+app.post('/remind', (req, res) => {
+    const { targetUserId, fromUserName, amount, groupName } = req.body;
+    if (!targetUserId) return res.status(400).json({ error: 'targetUserId required' });
+    
+    io.to(targetUserId).emit('notification', {
+        type: 'remind',
+        message: `💸 ${fromUserName || 'Someone'} is reminding you that you owe ${amount ? `$${amount.toFixed(2)}` : 'money'}${groupName ? ` in "${groupName}"` : ''}`,
+        fromUserName,
+        amount,
+        groupName,
+        timestamp: new Date().toISOString()
+    });
+    
+    console.log(`🔔 Reminder sent to ${targetUserId} from ${fromUserName}`);
+    res.json({ success: true, message: 'Reminder sent' });
+});
+
 const PORT = process.env.PORT || 3006;
 
 async function startNotificationWorker() {
@@ -23,7 +45,6 @@ async function startNotificationWorker() {
         const rabbitUrl = process.env.RABBITMQ_URL || 'amqp://localhost';
         const connection = await amqp.connect(rabbitUrl);
         
-        // Handle connection closure
         connection.on('close', () => {
             console.error("❌ RabbitMQ Connection closed. Retrying in 5s...");
             setTimeout(startNotificationWorker, 5000);

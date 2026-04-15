@@ -163,14 +163,34 @@ export default function GroupDetail() {
     } catch(e) { console.error(e); alert('Error'); }
   };
 
+  const refreshData = () => {
+      api.get(`/expenses/group/${id}`).then(res => setExpenses(res.data)).catch(console.error);
+      api.get(`/settlements/balances/${id}`).then(res => setBalances(res.data.balances || {})).catch(console.error);
+  };
+
+  const handleRemind = async (targetUserId, targetName, amount) => {
+    try {
+        await fetch('http://localhost:3006/remind', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                targetUserId,
+                fromUserName: user.name || user.email,
+                amount,
+                groupName: activeGroup?.name
+            })
+        });
+        setToastMessage(`Reminder sent to ${targetName}!`);
+        setTimeout(() => setToastMessage(null), 4000);
+    } catch(e) { console.error('Remind error:', e); }
+  };
+
   const handleSettle = async (whoOwes, whoIsOwed, amountToSettle, fullAmount) => {
     const finalAmount = amountToSettle !== undefined ? (parseFloat(amountToSettle) / multiplier) : fullAmount;
     try { 
         await api.post('/settlements/settle', { groupId: activeGroup._id, borrowerId: whoOwes, lenderId: whoIsOwed, amount: finalAmount }); 
         setIsSettleOpen(false); 
-        setTimeout(() => {
-            api.get(`/settlements/balances/${id}`).then(res => setBalances(res.data.balances || {})).catch(console.error);
-        }, 1500); 
+        setTimeout(refreshData, 1500); 
     } catch(e) { console.error(e); }
   };
 
@@ -204,10 +224,10 @@ export default function GroupDetail() {
             <div className="flex min-w-0 flex-col gap-8 xl:col-span-2">
               <BalanceCard onSettle={() => setIsSettleOpen(true)} totalOwed={totalOwedToYou} totalOwe={totalYouOwe} owedPeopleCount={owedPeopleCount} owePeopleCount={owePeopleCount} />
               <MonthlyChart rawExpenses={expenses} />
-              <ExpenseLedger expenses={expenses} users={allUsers} currentUser={user} />
+              <ExpenseLedger expenses={expenses} users={allUsers} currentUser={user} onExpenseUpdated={refreshData} />
             </div>
             <div className="flex min-w-0 flex-col gap-8 xl:col-span-1">
-              <MemberDebtList onSettle={() => setIsSettleOpen(true)} balances={balances} users={allUsers} currentUser={user} />
+              <MemberDebtList onSettle={() => setIsSettleOpen(true)} onRemind={handleRemind} balances={balances} users={allUsers} currentUser={user} />
               <CategorySpending rawExpenses={expenses} />
               <QuickStats rawExpenses={expenses} currentUser={user} balances={balances} activeGroup={activeGroup} />
               <ActivityFeed rawExpenses={expenses} users={allUsers} />

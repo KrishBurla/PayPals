@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/db');
-const { addExpense, getGroupExpenses } = require('./controllers/expenseController');
+const { addExpense, getGroupExpenses, updateExpense } = require('./controllers/expenseController');
 
 const app = express();
 app.use(express.json());
@@ -10,6 +10,7 @@ app.use(cors());
 connectDB();
 
 app.post('/', addExpense);
+app.put('/:id', updateExpense);
 app.get('/group/:groupId', getGroupExpenses);
 
 const PORT = process.env.PORT || 3004;

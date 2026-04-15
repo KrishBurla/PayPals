@@ -1,4 +1,3 @@
-// src/pages/Register.jsx
 import React, { useState, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
@@ -20,10 +19,9 @@ const Register = () => {
         setError('');
         
         try {
-            // Sends the request to your Gateway -> Auth Service
             const response = await api.post('/auth/register', { name, email, password });
-            login(response.data.token); // Save token
-            navigate('/dashboard');     // Teleport to dashboard
+            login(response.data.token);
+            navigate('/dashboard');
         } catch (err) {
             setError(err.response?.data?.error || 'Registration failed. Try again.');
             setIsLoading(false);
@@ -31,45 +29,56 @@ const Register = () => {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
-            <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 space-y-6 border border-slate-100">
-                
-                <div className="text-center space-y-2">
-                    <div className="mx-auto w-16 h-16 bg-teal-100 rounded-2xl flex items-center justify-center mb-6 shadow-sm border border-teal-200">
-                        <span className="text-3xl font-bold text-teal-600">$</span>
-                    </div>
-                    <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Create Account</h2>
-                    <p className="text-slate-500 text-sm font-medium">Join to start splitting expenses.</p>
-                </div>
+        <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-slate-950">
+            {/* Animated gradient background */}
+            <div className="absolute inset-0 overflow-hidden">
+                <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-indigo-500/20 blur-3xl animate-float" />
+                <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full bg-teal-500/20 blur-3xl animate-float-delayed" />
+                <div className="absolute top-1/3 right-1/4 w-72 h-72 rounded-full bg-purple-500/10 blur-3xl animate-pulse-slow" />
+                <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0)', backgroundSize: '40px 40px' }} />
+            </div>
 
-                {error && (
-                    <div className="bg-rose-50 text-rose-600 p-3 rounded-xl text-sm font-bold border border-rose-100 text-center">
-                        {error}
-                    </div>
-                )}
-                
-                <form onSubmit={handleRegister} className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-1">Full Name</label>
-                        <input type="text" placeholder="John Doe" value={name} onChange={(e) => setName(e.target.value)} required className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all bg-slate-50 focus:bg-white font-medium" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-1">Email Address</label>
-                        <input type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all bg-slate-50 focus:bg-white font-medium" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-1">Password</label>
-                        <input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all bg-slate-50 focus:bg-white font-medium" />
-                    </div>
+            <div className="relative z-10 max-w-md w-full">
+                <div className="backdrop-blur-xl bg-white/10 rounded-3xl shadow-2xl p-8 space-y-6 border border-white/10 ring-1 ring-white/5">
                     
-                    <button type="submit" disabled={isLoading} className="w-full mt-2 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition-all active:scale-95 disabled:opacity-70 flex justify-center items-center">
-                        {isLoading ? "Creating Account..." : "Sign Up"}
-                    </button>
-                </form>
+                    <div className="text-center space-y-3">
+                        <div className="mx-auto w-16 h-16 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-indigo-500/30 animate-in">
+                            <span className="text-3xl font-black text-white">P</span>
+                        </div>
+                        <h2 className="text-3xl font-extrabold text-white tracking-tight">Create Account</h2>
+                        <p className="text-white/50 text-sm font-medium">Join to start splitting expenses with friends.</p>
+                    </div>
 
-                <p className="text-center text-sm font-medium text-slate-500 pt-2 border-t border-slate-100">
-                    Already have an account? <Link to="/login" className="text-teal-600 font-bold hover:text-teal-700">Log In</Link>
-                </p>
+                    {error && (
+                        <div className="bg-rose-500/10 text-rose-400 p-3 rounded-xl text-sm font-bold border border-rose-500/20 text-center backdrop-blur-sm">
+                            {error}
+                        </div>
+                    )}
+                    
+                    <form onSubmit={handleRegister} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-bold text-white/70 mb-1.5">Full Name</label>
+                            <input type="text" placeholder="John Doe" value={name} onChange={(e) => setName(e.target.value)} required className="w-full px-4 py-3.5 rounded-xl border border-white/10 bg-white/5 text-white placeholder-white/30 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 outline-none transition-all backdrop-blur-sm font-medium" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-white/70 mb-1.5">Email Address</label>
+                            <input type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full px-4 py-3.5 rounded-xl border border-white/10 bg-white/5 text-white placeholder-white/30 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 outline-none transition-all backdrop-blur-sm font-medium" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-white/70 mb-1.5">Password</label>
+                            <input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full px-4 py-3.5 rounded-xl border border-white/10 bg-white/5 text-white placeholder-white/30 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 outline-none transition-all backdrop-blur-sm font-medium" />
+                        </div>
+                        
+                        <button type="submit" disabled={isLoading} className="w-full mt-2 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-400 hover:to-indigo-500 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-indigo-500/25 transition-all active:scale-95 disabled:opacity-70 flex justify-center items-center">
+                            {isLoading ? "Creating Account..." : "Sign Up"}
+                        </button>
+                    </form>
+
+                    <p className="text-center text-sm font-medium text-white/40 pt-2 border-t border-white/10">
+                        Already have an account? <Link to="/login" className="text-indigo-400 font-bold hover:text-indigo-300 transition-colors">Log In</Link>
+                    </p>
+                </div>
+                <p className="text-center text-xs text-white/20 mt-6 font-medium">PayPals • Split expenses effortlessly</p>
             </div>
         </div>
     );
