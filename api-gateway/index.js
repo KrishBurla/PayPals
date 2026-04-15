@@ -57,9 +57,19 @@ for (const [path, target] of Object.entries(routes)) {
             if (req.headers['x-user-id']) {
                 proxyReq.setHeader('x-user-id', req.headers['x-user-id']);
             }
+        },
+        onError: (err, req, res) => {
+            console.error(`Proxy error on ${req.url}:`, err.message);
+            res.status(502).json({ success: false, message: "Service unavailable or gateway timeout." });
         }
     }));
 }
+
+// Global Error Handling Middleware
+app.use((err, req, res, next) => {
+    console.error("Gateway Error:", err.stack);
+    res.status(500).json({ success: false, message: err.message || "Internal Server Error" });
+});
 
 app.listen(PORT, () => {
     console.log(`🌐 API Gateway running on port ${PORT}`);

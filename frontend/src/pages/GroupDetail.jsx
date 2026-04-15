@@ -53,7 +53,7 @@ export default function GroupDetail() {
   const [splitData, setSplitData] = useState({}); // { userId: value }
   
   const { user } = useContext(AuthContext);
-  const { formatCurrency } = useContext(CurrencyContext);
+  const { formatCurrency, multiplier } = useContext(CurrencyContext);
 
   const [activeGroup, setActiveGroup] = useState(null);
   const [expenses, setExpenses] = useState([]);
@@ -61,11 +61,17 @@ export default function GroupDetail() {
   const [allUsers, setAllUsers] = useState([]);
 
   useEffect(() => {
-    const socket = io('http://localhost:3006');
+    if (!user?.id) return;
+    const socket = io('http://localhost:3006', { query: { userId: user.id } });
+    
     socket.on('notification', (payload) => {
         setToastMessage(payload.type === 'settle' ? 'A balance was settled!' : 'A new expense was added!');
         setTimeout(() => setToastMessage(null), 5000);
-        setTimeout(() => window.location.reload(), 1000); // Quick refresh hack
+        
+        if (id) {
+            api.get(`/expenses/group/${id}`).then(res => setExpenses(res.data)).catch(console.error);
+            api.get(`/settlements/balances/${id}`).then(res => setBalances(res.data.balances || {})).catch(console.error);
+        }
     });
 
     api.get('/auth/users').then(res => setAllUsers(res.data)).catch(console.error);
@@ -75,7 +81,9 @@ export default function GroupDetail() {
         api.get(`/expenses/group/${id}`).then(res => setExpenses(res.data)).catch(console.error);
         api.get(`/settlements/balances/${id}`).then(res => setBalances(res.data.balances || {})).catch(console.error);
     }
-  }, [id]);
+
+    return () => socket.disconnect();
+  }, [id, user]);
 
   useEffect(() => {
       if (activeGroup?.members && Object.keys(splitData).length === 0) {
@@ -100,8 +108,9 @@ export default function GroupDetail() {
   };
 
   const handleSubmitExpense = async () => {
-      const amt = parseFloat(expenseAmount);
-      if (!expenseDesc || !amt || Object.keys(splitData).length === 0) {
+      const amtUserInput = parseFloat(expenseAmount);
+      const baseAmt = amtUserInput / multiplier;
+      if (!expenseDesc || !baseAmt || Object.keys(splitData).length === 0) {
           alert('Please fill out all fields.'); return;
       }
       
@@ -111,10 +120,10 @@ export default function GroupDetail() {
       if (splitType === 'EQUAL') {
           payloadParticipants = Object.keys(splitData);
       } else if (splitType === 'EXACT') {
-          payloadParticipants = Object.keys(splitData).map(uid => ({ userId: uid, exact: parseFloat(splitData[uid]) || 0 }));
+          payloadParticipants = Object.keys(splitData).map(uid => ({ userId: uid, exact: (parseFloat(splitData[uid]) || 0) / multiplier }));
           const sum = payloadParticipants.reduce((a, b) => a + b.exact, 0);
-          if (Math.abs(sum - amt) > 0.1) {
-              alert(`Exact amounts sum to ${sum}, but total is ${amt}!`); return;
+          if (Math.abs(sum - baseAmt) > 0.01) {
+              alert(`Exact amounts sum to ${(sum * multiplier).toFixed(2)}, but total is ${amtUserInput}!`); return;
           }
       } else if (splitType === 'PERCENTAGE') {
           payloadParticipants = Object.keys(splitData).map(uid => ({ userId: uid, percent: parseFloat(splitData[uid]) || 0 }));
@@ -127,7 +136,7 @@ export default function GroupDetail() {
       try {
           await api.post('/expenses', {
               groupId: activeGroup._id,
-              amount: amt,
+              amount: baseAmt,
               description: expenseDesc,
               category: finalCategory,
               splitType: splitType,
@@ -155,7 +164,7 @@ export default function GroupDetail() {
   };
 
   const handleSettle = async (whoOwes, whoIsOwed, amountToSettle, fullAmount) => {
-    const finalAmount = parseFloat(amountToSettle) || fullAmount;
+    const finalAmount = amountToSettle !== undefined ? (parseFloat(amountToSettle) / multiplier) : fullAmount;
     try { 
         await api.post('/settlements/settle', { groupId: activeGroup._id, borrowerId: whoOwes, lenderId: whoIsOwed, amount: finalAmount }); 
         setIsSettleOpen(false); 
@@ -310,7 +319,7 @@ export default function GroupDetail() {
                         )}
                         {splitType === 'EXACT' && (
                             <p className="mt-2 text-right text-xs font-bold text-slate-400">
-                                Total: {formatCurrency(Object.values(splitData).reduce((a,b) => a + (parseFloat(b)||0), 0))} / {formatCurrency(parseFloat(expenseAmount)||0)}
+                                Total: {formatCurrency(Object.values(splitData).reduce((a,b) => a + (parseFloat(b)||0), 0) / multiplier)} / {formatCurrency((parseFloat(expenseAmount)||0) / multiplier)}
                             </p>
                         )}
                     </div>
@@ -349,7 +358,7 @@ export default function GroupDetail() {
                     else if (whoIsOwed === user.id) { direction = "owes_you"; otherUserId = whoOwes; }
                     if (!direction) return null;
                     const otherUser = allUsers.find(u => u.id === otherUserId);
-                    const currentInputAmount = settleAmounts[key] !== undefined ? settleAmounts[key] : amount;
+                    const currentInputAmount = settleAmounts[key] !== undefined ? settleAmounts[key] : (amount * multiplier).toFixed(2);
                     return (
                         <div key={key} className="flex flex-col gap-2 border p-3 rounded-xl border-slate-100">
                             <div className="flex items-center gap-4">
@@ -361,7 +370,7 @@ export default function GroupDetail() {
                                     <p className={direction==='you_owe'?'text-rose-600 font-bold text-xs':'text-teal-600 font-bold text-xs'}>{direction==='you_owe'? `you owe ${formatCurrency(amount)}` : `owes you ${formatCurrency(amount)}`}</p>
                                 </div>
                                 <div className="relative w-24">
-                                    <span className="absolute left-3 top-2 text-slate-400 font-bold text-sm">$</span>
+                                    <span className="absolute left-3 top-2 text-slate-400 font-bold text-sm">{formatCurrency(0).charAt(0)}</span>
                                     <input 
                                         type="number" 
                                         value={currentInputAmount} 
@@ -369,7 +378,7 @@ export default function GroupDetail() {
                                         className="w-full pl-7 pr-2 py-1.5 border rounded-lg text-sm font-bold outline-none border-slate-200 focus:border-teal-500" 
                                     />
                                 </div>
-                                <button onClick={() => handleSettle(whoOwes, whoIsOwed, currentInputAmount, amount)} className={`px-4 py-2 rounded-lg font-bold text-white shadow-sm ${direction==='you_owe'?'bg-rose-500':'bg-teal-500'}`}>Settle</button>
+                                <button onClick={() => handleSettle(whoOwes, whoIsOwed, settleAmounts[key], amount)} className={`px-4 py-2 rounded-lg font-bold text-white shadow-sm ${direction==='you_owe'?'bg-rose-500':'bg-teal-500'}`}>Settle</button>
                             </div>
                         </div>
                     )

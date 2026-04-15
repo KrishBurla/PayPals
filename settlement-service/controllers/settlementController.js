@@ -6,6 +6,13 @@ exports.startConsumer = async () => {
     try {
         const rabbitUrl = process.env.RABBITMQ_URL || 'amqp://localhost';
         const connection = await amqp.connect(rabbitUrl);
+        
+        // Handle connection closure
+        connection.on('close', () => {
+            console.error("❌ RabbitMQ Consumer connection closed. Retrying in 5s...");
+            setTimeout(exports.startConsumer, 5000);
+        });
+
         const channel = await connection.createChannel();
         
         const exchange = 'expense_events';
@@ -14,7 +21,7 @@ exports.startConsumer = async () => {
         // Let RabbitMQ create an exclusive, temporary queue for this consumer
         const q = await channel.assertQueue('', { exclusive: true });
         
-        console.log(`🎧 Settlement Service listening on queue: ${q.queue} bound to exchange ${exchange}`);
+        console.log(`🎧 Settlement Service connected and listening on queue: ${q.queue}`);
 
         channel.bindQueue(q.queue, exchange, '');
 
@@ -46,7 +53,8 @@ exports.startConsumer = async () => {
             }
         });
     } catch (error) {
-        console.error("❌ RabbitMQ Consumer Error:", error);
+        console.error("❌ RabbitMQ Consumer Connection Error. Retrying in 5s...");
+        setTimeout(exports.startConsumer, 5000);
     }
 };
 

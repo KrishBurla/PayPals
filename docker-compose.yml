@@ -6,19 +6,33 @@ services:
       MYSQL_DATABASE: splitwise_auth
     ports:
       - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
 
   mongodb:
     image: mongo:latest
     ports:
       - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
 
   redis:
     image: redis:alpine
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
 
   rabbitmq:
     image: rabbitmq:3-management
     ports:
       - "5672:5672"   # Message broker (Used by our Node apps)
       - "15672:15672" # Management UI (Viewable in your browser)
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+volumes:
+  mysql_data:
+  mongodb_data:
+  redis_data:
+  rabbitmq_data:
