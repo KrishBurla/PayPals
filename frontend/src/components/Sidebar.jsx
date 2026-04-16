@@ -1,10 +1,11 @@
 import React, { useState, useContext } from "react"
+import { Link } from "react-router-dom"
 import { AuthContext } from "../context/AuthContext"
-import { LayoutDashboard, Users, Activity, Settings, LogOut, ChevronLeft, Menu } from "lucide-react"
+import { LayoutDashboard, Users, Settings, LogOut, ChevronLeft, Menu } from "lucide-react"
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", active: window.location.pathname.includes('dashboard') },
-  { icon: Users, label: "Groups", href: "/groups", badge: 3, active: window.location.pathname.includes('groups') },
+  { icon: Users, label: "Groups", href: "/groups", active: window.location.pathname.includes('groups') },
   { icon: Settings, label: "Settings", href: "/settings", active: window.location.pathname.includes('settings') },
 ]
 
@@ -28,15 +29,15 @@ export function Sidebar() {
       <nav className="flex-1 space-y-1.5 overflow-y-auto p-4">
         <p className="mb-3 px-4 text-xs font-bold uppercase tracking-wider text-slate-400">Main Menu</p>
         {navItems.map((item) => (
-          <a 
+          <Link 
             key={item.label} 
-            href={item.href} 
+            to={item.href} 
+            onClick={() => setIsOpen(false)}
             className={`group flex items-center gap-3 rounded-xl px-4 py-3.5 text-sm font-bold transition-all duration-200 ${item.active ? "bg-teal-50 text-teal-700" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
           >
             <item.icon className={`h-5 w-5 transition-transform duration-200 group-hover:scale-110 ${item.active ? "text-teal-600" : ""}`} />
             <span>{item.label}</span>
-            {item.badge && <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-teal-500 px-1.5 text-[10px] font-black text-white">{item.badge}</span>}
-          </a>
+          </Link>
         ))}
       </nav>
 

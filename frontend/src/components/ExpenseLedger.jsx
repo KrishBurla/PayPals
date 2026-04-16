@@ -14,7 +14,7 @@ const categoryIcons = {
 }
 
 export function ExpenseLedger({ expenses = [], users = [], currentUser, onExpenseUpdated }) {
-  const { formatCurrency } = useCurrency();
+  const { formatCurrency, currency } = useCurrency();
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
   const [selectedExpense, setSelectedExpense] = useState(null);
@@ -163,7 +163,7 @@ export function ExpenseLedger({ expenses = [], users = [], currentUser, onExpens
                 <input type="text" value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 font-medium" />
               </div>
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Amount (USD)</label>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Amount ({currency})</label>
                 <input type="number" value={editForm.amount} onChange={e => setEditForm({...editForm, amount: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 font-medium" />
               </div>
               <div>

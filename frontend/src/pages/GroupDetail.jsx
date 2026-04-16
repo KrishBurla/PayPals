@@ -158,9 +158,19 @@ export default function GroupDetail() {
     try {
         const foundUser = allUsers.find(u => u.email === memberEmail);
         if (!foundUser) { alert("User not found!"); return; }
-        await api.post(`/groups/${activeGroup._id}/members`, { userId: foundUser.id });
-        setIsAddMemberOpen(false); setMemberEmail(''); window.location.reload();
-    } catch(e) { console.error(e); alert('Error'); }
+        if (foundUser.id === user.id) { alert("You're already in the group!"); return; }
+        await api.post(`/groups/${activeGroup._id}/invite`, { 
+            userId: foundUser.id,
+            inviterName: user.name || user.email
+        });
+        setIsAddMemberOpen(false); 
+        setMemberEmail('');
+        setToastMessage(`Invite sent to ${foundUser.name}! They'll need to accept it.`);
+        setTimeout(() => setToastMessage(null), 5000);
+    } catch(e) { 
+        const msg = e.response?.data?.error || 'Error sending invite';
+        alert(msg);
+    }
   };
 
   const refreshData = () => {
@@ -353,9 +363,10 @@ export default function GroupDetail() {
       {isAddMemberOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={() => setIsAddMemberOpen(false)}>
             <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl animate-in" onClick={e => e.stopPropagation()}>
-                <h2 className="text-2xl font-extrabold mb-4">Add Member</h2>
+                <h2 className="text-2xl font-extrabold mb-1">Invite Member</h2>
+                <p className="text-sm text-slate-500 mb-5">They'll receive an invite on their dashboard and can accept or decline.</p>
                 <input type="text" value={memberEmail} onChange={e=>setMemberEmail(e.target.value)} placeholder="Email address" className="w-full border rounded-xl px-4 py-3 mb-4 outline-none focus:border-teal-500" />
-                <button onClick={handleAddMember} className="w-full rounded-xl bg-slate-900 py-3 text-white font-bold">Invite</button>
+                <button onClick={handleAddMember} className="w-full rounded-xl bg-slate-900 py-3 text-white font-bold">Send Invite</button>
             </div>
         </div>
       )}

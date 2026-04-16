@@ -50,8 +50,8 @@ export function MemberDebtList({ balances = {}, users = [], currentUser, onSettl
 
       // Find expenses that link these two users together
       const sharedExpenses = expenses.filter(ex => 
-          (ex.paidBy === currentUser.id && ex.participants?.some(p => p.userId === otherUserId)) ||
-          (ex.paidBy === otherUserId && ex.participants?.some(p => p.userId === currentUser.id))
+          (ex.paidBy === currentUser.id && ex.splits?.some(s => s.userId === otherUserId)) ||
+          (ex.paidBy === otherUserId && ex.splits?.some(s => s.userId === currentUser.id))
       );
       
       memberDebts.push({

@@ -8,7 +8,7 @@ import api from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import toast from 'react-hot-toast';
-import { ChevronDown, ChevronUp, Receipt } from "lucide-react";
+import { ChevronDown, ChevronUp, Receipt, Mail, Check, X as CloseIcon } from "lucide-react";
 
 export default function Dashboard() {
   const { user } = useContext(AuthContext);
@@ -29,6 +29,19 @@ export default function Dashboard() {
         });
     });
 
+    socket.on('group_invite', (data) => {
+        toast.success(data.message || 'New Group Invite!', {
+            style: {
+                background: '#4f46e5',
+                color: '#ffffff',
+                borderRadius: '16px',
+            },
+            icon: '📬'
+        });
+        // Refresh invites list
+        api.get('/groups/invites').then(res => setInvites(res.data)).catch(console.error);
+    });
+
     return () => socket.disconnect();
   }, [user]);
 
@@ -39,9 +52,11 @@ export default function Dashboard() {
   const [allExpenses, setAllExpenses] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [expandedFriendId, setExpandedFriendId] = useState(null);
+  const [invites, setInvites] = useState([]);
 
   useEffect(() => {
     api.get('/auth/users').then(res => setAllUsers(res.data)).catch(console.error);
+    api.get('/groups/invites').then(res => setInvites(res.data)).catch(console.error);
 
     if (user?.id) {
         api.get('/groups/user').then(async res => {
@@ -117,6 +132,31 @@ export default function Dashboard() {
     }
   }, [user]);
 
+  const handleAcceptInvite = async (inviteId) => {
+    try {
+        await api.post(`/groups/invites/${inviteId}/accept`);
+        toast.success("Joined group!");
+        // Refresh groups and invites
+        api.get('/groups/user').then(async res => setGroups(res.data));
+        setInvites(invites.filter(i => i._id !== inviteId));
+        // Force a total refresh of balances by triggering the main useEffect if needed, 
+        // or just window.location.reload() for simplicity in a heavy data component
+        setTimeout(() => window.location.reload(), 500);
+    } catch (err) {
+        toast.error("Failed to accept invite");
+    }
+  };
+
+  const handleDeclineInvite = async (inviteId) => {
+    try {
+        await api.post(`/groups/invites/${inviteId}/decline`);
+        toast.success("Invite declined");
+        setInvites(invites.filter(i => i._id !== inviteId));
+    } catch (err) {
+        toast.error("Failed to decline invite");
+    }
+  };
+
   if (!user) return null;
 
   return (
@@ -148,6 +188,43 @@ export default function Dashboard() {
                  </div>
              </div>
           </div>
+
+          {/* PENDING INVITES SECTION */}
+          {invites.length > 0 && (
+            <div className="mb-8 space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                    <Mail className="h-5 w-5 text-indigo-500" />
+                    <h2 className="text-xl font-bold">Group Invitations ({invites.length})</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {invites.map(invite => (
+                        <div key={invite._id} className="p-6 rounded-3xl border border-indigo-100 bg-white shadow-sm ring-1 ring-indigo-50 flex flex-col justify-between animate-in">
+                            <div>
+                                <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest mb-1">New Invitation</p>
+                                <h3 className="text-lg font-black text-slate-900 mb-2">{invite.groupName}</h3>
+                                <p className="text-sm text-slate-500 mb-6">
+                                    <span className="font-bold text-slate-900">{invite.inviterName || 'Someone'}</span> invited you to join this group.
+                                </p>
+                            </div>
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={() => handleAcceptInvite(invite._id)}
+                                    className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-2.5 text-sm font-bold transition-all active:scale-95"
+                                >
+                                    <Check className="h-4 w-4" /> Accept
+                                </button>
+                                <button 
+                                    onClick={() => handleDeclineInvite(invite._id)}
+                                    className="flex items-center justify-center px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl py-2.5 text-sm font-bold transition-all active:scale-95"
+                                >
+                                    <CloseIcon className="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
               <div className="xl:col-span-2 space-y-8">

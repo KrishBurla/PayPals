@@ -8,6 +8,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
 exports.register = async (req, res) => {
     try {
         const { name, email, password } = req.body;
+
+        if (!name || !email || !password) {
+            return res.status(400).json({ error: "Name, email, and password are required" });
+        }
         
         // Hash password and generate a UUID for the user
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -18,7 +22,10 @@ exports.register = async (req, res) => {
             [userId, name, email, hashedPassword]
         );
 
-        res.status(201).json({ message: "User registered successfully", userId });
+        // Issue a token immediately so the user is logged in right after registering
+        const token = jwt.sign({ id: userId, email, name }, JWT_SECRET, { expiresIn: '24h' });
+
+        res.status(201).json({ message: "User registered successfully", token });
     } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ error: "Email already exists" });
@@ -39,7 +46,7 @@ exports.login = async (req, res) => {
         }
 
         // Generate JWT
-        const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '24h' });
+        const token = jwt.sign({ id: user.id, email: user.email, name: user.name }, JWT_SECRET, { expiresIn: '24h' });
 
         res.status(200).json({ message: "Login successful", token });
     } catch (error) {

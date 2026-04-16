@@ -38,6 +38,24 @@ app.post('/remind', (req, res) => {
     res.json({ success: true, message: 'Reminder sent' });
 });
 
+// POST /invite-notify — push a real-time group invite to a user
+app.post('/invite-notify', (req, res) => {
+    const { targetUserId, inviterName, groupName, inviteId } = req.body;
+    if (!targetUserId) return res.status(400).json({ error: 'targetUserId required' });
+
+    io.to(targetUserId).emit('group_invite', {
+        type: 'group_invite',
+        message: `📬 ${inviterName || 'Someone'} invited you to join "${groupName}"`,
+        inviterName,
+        groupName,
+        inviteId,
+        timestamp: new Date().toISOString()
+    });
+
+    console.log(`📬 Invite notification sent to ${targetUserId} for group "${groupName}"`);
+    res.json({ success: true });
+});
+
 const PORT = process.env.PORT || 3006;
 
 async function startNotificationWorker() {

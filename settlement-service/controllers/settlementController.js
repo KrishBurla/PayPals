@@ -59,26 +59,13 @@ exports.startConsumer = async () => {
 };
 
 // 📊 Get Group Balances
-const { publishToExchange } = require('../../shared/rabbitmq') || {};
-const amqpLocal = require('amqplib');
+const { publishToExchange } = require('../../shared/rabbitmq');
 
 exports.settleUp = async (req, res) => {
     try {
         const { groupId, borrowerId, lenderId, amount } = req.body;
         
-        let pQueue = publishToExchange;
-        if (!pQueue) {
-            pQueue = async (ex, d) => {
-                const rabbitUrl = process.env.RABBITMQ_URL || 'amqp://localhost';
-                const connection = await amqpLocal.connect(rabbitUrl);
-                const channel = await connection.createChannel();
-                await channel.assertExchange(ex, 'fanout', { durable: false });
-                channel.publish(ex, '', Buffer.from(JSON.stringify(d)));
-                setTimeout(() => { connection.close(); }, 500);
-            };
-        }
-        
-        await pQueue('expense_events', {
+        await publishToExchange('expense_events', {
             type: 'settle',
             groupId, borrowerId, lenderId, amount
         });
