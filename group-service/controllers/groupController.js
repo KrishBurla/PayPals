@@ -19,15 +19,20 @@ function notifyInvite(targetUserId, inviterName, groupName, inviteId) {
 
 exports.createGroup = async (req, res) => {
     try {
-        const { name, members } = req.body;
-        const createdBy = req.body.createdBy || req.headers['x-user-id'];
-        
-        const groupMembers = members ? [...new Set([...members, createdBy])] : [createdBy];
+        const { name } = req.body;
+        const createdBy = req.headers['x-user-id'] || req.body.createdBy;
 
-        const group = new Group({ name, createdBy, members: groupMembers });
+        // Force only the creator to be a member initially
+        const group = new Group({ 
+            name, 
+            createdBy, 
+            members: [createdBy] 
+        });
+        
         await group.save();
         res.status(201).json({ message: "Group created successfully", group });
     } catch (error) {
+        console.error("Create Group Error:", error);
         res.status(500).json({ error: "Server error while creating group" });
     }
 };

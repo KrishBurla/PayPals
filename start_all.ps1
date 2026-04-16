@@ -11,7 +11,7 @@ Start-Process -FilePath "node" -ArgumentList "expense-service\index.js" -Working
 Start-Process -FilePath "node" -ArgumentList "group-service\index.js" -WorkingDirectory "$PSScriptRoot" -WindowStyle Normal
 Start-Process -FilePath "node" -ArgumentList "notification-service\index.js" -WorkingDirectory "$PSScriptRoot" -WindowStyle Normal
 Start-Process -FilePath "node" -ArgumentList "settlement-service\index.js" -WorkingDirectory "$PSScriptRoot" -WindowStyle Normal
-# Start-Process -FilePath "node" -ArgumentList "user-service\index.js" -WorkingDirectory "$PSScriptRoot" -WindowStyle Normal
+# user-service is DEPRECATED (Logic moved to auth-service)
 
 # Start frontend
 Write-Host "Starting frontend dev server..."

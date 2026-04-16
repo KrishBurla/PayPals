@@ -54,14 +54,27 @@ export default function GroupsPage() {
         if (!newGroupName.trim()) { alert('Please enter a group name'); return; }
         setIsCreating(true);
         try {
-            const members = [...new Set([user.id, ...selectedMembers])];
-            await api.post('/groups', { name: newGroupName, members });
+            // Step 1: Create the group (Backend now only adds the creator)
+            const res = await api.post('/groups', { name: newGroupName });
+            const groupId = res.data.group._id;
+            
+            // Step 2: Send invitations for each selected member
+            const invitePromises = selectedMembers.map(mid => 
+                api.post(`/groups/${groupId}/invite`, { 
+                    userId: mid, 
+                    inviterName: user.name || user.email 
+                }).catch(err => console.error(`Failed to invite ${mid}:`, err))
+            );
+            
+            await Promise.all(invitePromises);
+
             setIsCreateOpen(false);
             setNewGroupName('');
             setSelectedMembers([]);
             // Refresh groups
-            const res = await api.get('/groups/user');
-            setGroups(res.data);
+            const refreshRes = await api.get('/groups/user');
+            setGroups(refreshRes.data);
+            alert('Group created and invitations sent!');
         } catch (e) {
             console.error(e);
             alert('Error creating group');
