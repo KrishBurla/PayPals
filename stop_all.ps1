@@ -12,6 +12,6 @@ Write-Host "Stopping Node microservices on ports 3000-3006..."
 }
 
 Write-Host "Bringing down Docker containers..."
-docker-compose down
+docker-compose stop
 
 Write-Host "All services stopped!"
